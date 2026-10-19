@@ -303,7 +303,7 @@ ctx.session.regenerate();                             // on sign-in: same data, 
 ctx.session.destroy();                                // logout
 ```
 
-Sessions need no configuration. Like Next.js does for its Server Actions key, `amoxi build` generates an encryption key and embeds it in the server build (never in browser code), so sessions survive restarts and work across every worker and instance running that build. A new build gets a new key, which logs users out on deploy. To keep users logged in across deploys, optionally set `AMOXI_SESSION_SECRET` (32+ random characters, the same everywhere). Sessions are limited to about 4 KB, the browser's cookie limit.
+Sessions need no configuration. Like Next.js does for its Server Actions key, `amoxi build` generates an encryption key and embeds it in the server build (never in browser code), so sessions survive restarts and work across every worker and instance running that build. The key is created once per checkout in `.amoxi/session.key` (git-ignored), so rebuilding on your machine keeps you logged in, but a fresh checkout (a CI job, a Docker build) gets a new key, which logs users out on deploy. To keep users logged in across deploys, optionally set `AMOXI_SESSION_SECRET` (32+ random characters, the same everywhere). Sessions are limited to about 4 KB, the browser's cookie limit.
 
 **Making sign-out final.** Cookie sessions are stateless: `destroy()` removes the cookie from the browser, but a copy taken earlier (for example from a shared computer or by malware) keeps working until it expires (`amoxi.session.max-age`, 7 days by default). For apps where that matters, such as banking or health data, keep the ids of signed-in sessions on the server and check them in a middleware. The banking and clinic examples do exactly this:
 
@@ -656,7 +656,7 @@ Build in CI rather than on the server (`npm ci`, `npm run build`, `npm test`), a
 - **Cache only public content:** `@Cached` responses are shared by every visitor, so don't cache pages that use sessions or per-user data.
 - **Limits:** review `server.max-body-size` (1 MB), upload limits, `server.request-timeout` (30 s) and `amoxi.stream-timeout` (10 s) for your workload.
 - **Rolling deploys:** island bundles in `public/_amoxi/` have content-hashed names and are cached for a year. Deploy new files before or with new server code, and keep the previous build's files during a rolling deploy so open pages never request missing bundles. (Next.js calls this version skew.)
-- **Sessions:** the session key is generated at build time, so a deploy logs users out. Set `AMOXI_SESSION_SECRET` to avoid that; build output (and Docker images) contain the embedded key, so keep them private, as with Next.js builds.
+- **Sessions:** the session key is created per checkout (`.amoxi/session.key`), so a deploy built from a fresh checkout, as in CI or Docker, logs users out. Set `AMOXI_SESSION_SECRET` to avoid that; build output (and Docker images) contain the embedded key, so keep them private, as with Next.js builds.
 - **Public URL:** set `app.url` to your site's public address, so links in `llms.txt` and the AI views of pages never depend on the `Host` header a client sends.
 - **Upgrading Amoxi:** re-run `amoxi build` after upgrading, because the generated code must match the runtime.
 

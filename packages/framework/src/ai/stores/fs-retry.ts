@@ -24,6 +24,17 @@ export async function retryOnWindows<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * Whether creating a lock file with the 'wx' flag failed only because another process holds it:
+ * EEXIST everywhere, and on Windows also EPERM, EACCES or EBUSY, which is what creating a file
+ * reports while another process is deleting it ("delete pending").
+ */
+export function isLockBusy(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException)?.code;
+  if (code === 'EEXIST') return true;
+  return process.platform === 'win32' && code !== undefined && TRANSIENT.has(code);
+}
+
 /** Writes through a temporary file and a rename, so readers never see a half-written file. */
 export async function writeAtomic(file: string, body: string): Promise<void> {
   const tmp = `${file}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
@@ -44,15 +55,22 @@ export function readFileRetry(file: string): Promise<string> {
 /**
  * Runs `fn` while holding a lock file shared by every process using the same path (created with
  * the exclusive 'wx' flag). A lock older than `staleMs` was left by a crashed process and is taken over.
+ *
+ * On Windows, creating the lock while another process is deleting it fails with EPERM (the file is
+ * "delete pending") instead of EEXIST, so those errors also mean "held, wait". Only a long unbroken
+ * run of them (about 10 seconds) is treated as a real permission error.
  */
 export async function withFileLock<T>(lockPath: string, fn: () => Promise<T>, staleMs = 10_000): Promise<T> {
   const token = `${process.pid} ${randomBytes(6).toString('hex')} ${Date.now()}`;
+  let transientInARow = 0;
   for (let attempt = 0; ; attempt++) {
     try {
       await writeFile(lockPath, token, { encoding: 'utf8', flag: 'wx' });
       break;
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+      if (!isLockBusy(err)) throw err;
+      transientInARow = (err as NodeJS.ErrnoException).code === 'EEXIST' ? 0 : transientInARow + 1;
+      if (transientInARow > 200) throw err;
       try {
         const age = Date.now() - (await stat(lockPath)).mtimeMs;
         if (age > staleMs) await unlink(lockPath).catch(() => undefined);
@@ -66,7 +84,7 @@ export async function withFileLock<T>(lockPath: string, fn: () => Promise<T>, st
   try {
     return await fn();
   } finally {
-    const current = await readFile(lockPath, 'utf8').catch(() => undefined);
-    if (current === token) await unlink(lockPath).catch(() => undefined);
+    const current = await readFileRetry(lockPath).catch(() => undefined);
+    if (current === token) await retryOnWindows(() => unlink(lockPath)).catch(() => undefined);
   }
 }

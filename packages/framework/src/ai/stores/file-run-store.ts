@@ -4,7 +4,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { appendFile, link, mkdir, open, readdir, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { readFileRetry, withFileLock, writeAtomic } from './fs-retry';
+import { isLockBusy, readFileRetry, retryOnWindows, withFileLock, writeAtomic } from './fs-retry';
 import { matchesCondition, RunConflictError, TERMINAL_STATUSES, type RunEvent, type RunRecord, type RunStore, type RunUpdateCondition } from '../types';
 import { isClaimable, parseStaleBefore } from './memory-run-store';
 
@@ -142,8 +142,8 @@ export class FileRunStore implements RunStore {
         await writeFile(lock, token, { encoding: 'utf8', flag: 'wx' });
         break;
       } catch (err) {
-        if (!isCode(err, 'EEXIST')) throw err;
-        if (attempt >= 200) throw new RunConflictError(name);
+        if (!isLockBusy(err)) throw err;
+        if (attempt >= 200) throw isCode(err, 'EEXIST') ? new RunConflictError(name) : err;
         await this.breakAbandonedLock(lock);
         await new Promise((r) => setTimeout(r, 10));
       }
@@ -151,8 +151,8 @@ export class FileRunStore implements RunStore {
     try {
       return await fn();
     } finally {
-      const current = await readFile(lock, 'utf8').catch(() => undefined);
-      if (current === token) await unlink(lock).catch(() => undefined);
+      const current = await readFileRetry(lock).catch(() => undefined);
+      if (current === token) await retryOnWindows(() => unlink(lock)).catch(() => undefined);
     }
   }
 
@@ -222,7 +222,7 @@ export class FileRunStore implements RunStore {
     try {
       await writeFile(lock, token, { encoding: 'utf8', flag: 'wx' });
     } catch (err) {
-      if (!isCode(err, 'EEXIST')) throw err;
+      if (!isLockBusy(err)) throw err;
       await this.breakAbandonedLock(lock);
       return undefined;
     }
@@ -237,8 +237,8 @@ export class FileRunStore implements RunStore {
       });
     } finally {
       // Only remove the lock if it is still ours.
-      const current = await readFile(lock, 'utf8').catch(() => undefined);
-      if (current === token) await unlink(lock).catch(() => undefined);
+      const current = await readFileRetry(lock).catch(() => undefined);
+      if (current === token) await retryOnWindows(() => unlink(lock)).catch(() => undefined);
     }
   }
 

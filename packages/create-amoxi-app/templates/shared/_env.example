@@ -1,0 +1,4 @@
+# Optional settings. Nothing here is required: the app runs without any environment variables.
+# Copy to .env.local for local overrides (git-ignored), or set them in your hosting environment.
+# Any configuration key works; dots become underscores, e.g. server.port:
+# SERVER_PORT=8080

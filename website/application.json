@@ -1,0 +1,4 @@
+{
+  "app": { "name": "amoxi-website" },
+  "server": { "port": 8090, "static-dir": "public" }
+}

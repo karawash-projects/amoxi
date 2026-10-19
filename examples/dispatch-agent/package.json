@@ -1,0 +1,23 @@
+{
+  "name": "dispatch-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An AI dispatch agent: long-running route planning, event-driven exception handling and approvals for fleet operations.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "amoxi dev",
+    "build": "amoxi build && tsc -p tsconfig.json",
+    "start": "amoxi start dist/src/main.js --workers 1",
+    "test": "npm run build && node --test \"dist/test/*.test.js\""
+  },
+  "dependencies": {
+    "amoxi": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "~5.9.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

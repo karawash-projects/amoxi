@@ -1,0 +1,24 @@
+{
+  "name": "website",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Amoxi showcase site, built with Amoxi and exported to static HTML.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "node scripts/build-docs.mjs && amoxi dev",
+    "build": "node scripts/build-docs.mjs && amoxi build && tsc -p tsconfig.json",
+    "start": "amoxi start dist/src/main.js",
+    "test": "npm run build && node --test \"dist/test/*.test.js\"",
+    "export": "npm run build && amoxi export --strict"
+  },
+  "dependencies": {
+    "amoxi": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "~5.9.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

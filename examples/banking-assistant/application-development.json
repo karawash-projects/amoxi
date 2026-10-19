@@ -1,0 +1,7 @@
+{
+  "ai": {
+    "mcp": {
+      "token": "demo-mcp-token-NOT-A-SECRET-replace-in-production"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+node_modules
+dist
+.amoxi
+public/_amoxi
+src/generated
+.git
+.env
+.env.*
+!.env.example
+data

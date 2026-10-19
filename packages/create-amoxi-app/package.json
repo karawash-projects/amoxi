@@ -1,0 +1,42 @@
+{
+  "name": "create-amoxi-app",
+  "version": "0.5.0",
+  "description": "Create an Amoxi app: npx create-amoxi-app@latest my-app",
+  "keywords": [
+    "amoxi",
+    "create",
+    "scaffold",
+    "template"
+  ],
+  "homepage": "https://karawash-projects.github.io/amoxi/",
+  "bugs": {
+    "url": "https://github.com/karawash-projects/amoxi/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/karawash-projects/amoxi.git",
+    "directory": "packages/create-amoxi-app"
+  },
+  "license": "Apache-2.0",
+  "author": "Ahmad Karawash",
+  "bin": {
+    "create-amoxi-app": "index.js"
+  },
+  "files": [
+    "index.js",
+    "templates",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "prepublishOnly": "node ../../scripts/check-package.mjs",
+    "test": "node --test \"test/*.test.cjs\""
+  }
+}

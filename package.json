@@ -1,0 +1,30 @@
+{
+  "name": "amoxi-monorepo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/karawash-projects/amoxi.git"
+  },
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "npm run build -w amoxi && npm run build -w examples && npm run build -w website",
+    "test": "npm test -w amoxi && npm test -w create-amoxi-app && npm test -w examples && npm test -w website",
+    "start": "npm start -w user-service",
+    "website": "npm run dev -w website",
+    "bench": "node bench/startup-bench.mjs",
+    "create": "node packages/create-amoxi-app/index.js",
+    "check:licenses": "node scripts/check-licenses.mjs",
+    "verify": "node scripts/verify/verify.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  },
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "examples/*",
+    "website"
+  ],
+  "engines": {
+    "node": ">=22"
+  }
+}

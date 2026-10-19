@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.amoxi/
+public/_amoxi/
+src/generated/
+*.tsbuildinfo
+
+# Secrets such as API keys live in .env files. Never commit them; .env.example (no secrets) is kept.
+.env
+.env.*
+!.env.example
+
+# Agent runs, conversations and memory (amoxi/ai file store)
+data/

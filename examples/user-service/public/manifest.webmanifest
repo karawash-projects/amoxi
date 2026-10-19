@@ -1,0 +1,15 @@
+{
+  "name": "User service",
+  "short_name": "Users",
+  "start_url": "/people",
+  "display": "standalone",
+  "background_color": "#EEF1F5",
+  "theme_color": "#2F4A66",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

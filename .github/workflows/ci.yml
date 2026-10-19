@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commits:
+    name: Commit messages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          # A pull request is checked at its own head, not at the merge commit GitHub makes.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: No AI co-author or session trailers
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$BASE" ]; then RANGE="$BASE..HEAD"; else RANGE="HEAD"; fi
+          node scripts/check-commit-messages.mjs "$RANGE"
+
+  test:
+    name: Node ${{ matrix.node }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Scaffold and test new apps with create-amoxi-app (web and agent templates)
+        shell: bash
+        run: |
+          node packages/create-amoxi-app/index.js ../ci-app --yes --no-git
+          (cd ../ci-app && npm test)
+          node packages/create-amoxi-app/index.js ../ci-agent-app --template agent --no-git
+          (cd ../ci-agent-app && npm test)
+
+  package:
+    name: Package and dependency checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Dependency licenses are permissive
+        run: npm run check:licenses
+      - name: No known vulnerabilities in runtime dependencies
+        run: npm audit --omit=dev --audit-level=moderate
+      - name: Packages are publishable (license files, metadata, LF line endings)
+        run: |
+          npm run build -w amoxi
+          (cd packages/framework && node ../../scripts/check-package.mjs)
+          (cd packages/create-amoxi-app && node ../../scripts/check-package.mjs)
+          npm pack --dry-run -w amoxi
+          npm pack --dry-run -w create-amoxi-app
+
+  verify-quick:
+    name: Verify (quick) on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Build, test, pack, then attack the examples as production servers
+        run: npm run verify -- --quick
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verify-report-quick-${{ matrix.os }}
+          path: verify-report/
+          if-no-files-found: ignore
+
+  verify-full:
+    name: Verify (full, with browser, load and crash recovery)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright and Chromium for the browser stage
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - run: npm run verify
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: verify-report-full
+          path: verify-report/
+          if-no-files-found: ignore

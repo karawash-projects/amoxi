@@ -1,0 +1,44 @@
+{
+  "nav": {
+    "people": "People",
+    "wiring": "Wiring",
+    "status": "Status",
+    "language": "Language"
+  },
+  "layout": {
+    "started": "Started in {ms} ms on {platform}",
+    "skip": "Skip to content"
+  },
+  "people": {
+    "title": "People",
+    "count": "{count, plural, =0 {No people yet} one {# person} other {# people}}, kept in memory until the server stops.",
+    "recent": "Recently viewed",
+    "select": "Select a person to see their details.",
+    "all": "All people",
+    "email": "Email",
+    "id": "Id",
+    "added": "Added",
+    "notFound": "Person not found",
+    "notFoundText": "There's no one with id {id}. They may have been deleted."
+  },
+  "activity": {
+    "title": "Live activity"
+  },
+  "flash": {
+    "added": "Person added",
+    "deleted": "Person deleted"
+  },
+  "errors": {
+    "notFound": "Page not found",
+    "notFoundText": "The address may be mistyped, or the page may have moved.",
+    "server": "Something went wrong",
+    "serverText": "The server couldn't complete this request. Try again in a moment.",
+    "reference": "If you report this, include reference {id}.",
+    "home": "Go to People"
+  },
+  "status": {
+    "accent": "Accent colour",
+    "accentHex": "Hex",
+    "accentReset": "Reset"
+  }
+}

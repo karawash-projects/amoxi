@@ -1,0 +1,21 @@
+{
+  "app": {
+    "name": "Demo Clinic",
+    "description": "An AI patient assistant: symptom-safe triage, booking with confirmation, clinic policies and referrals from partner agents.",
+    "version": "1.0.0"
+  },
+  "server": {
+    "port": 8082
+  },
+  "ai": {
+    "store": {
+      "type": "memory"
+    },
+    "mcp": {
+      "enabled": false
+    },
+    "a2a": {
+      "enabled": true
+    }
+  }
+}

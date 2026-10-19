@@ -1,0 +1,27 @@
+node_modules/
+dist/
+.amoxi/
+bench/.generated-app/
+examples/*/public/_amoxi/
+examples/*/src/generated/
+examples/*/data/
+examples/*/out/
+website/public/_amoxi/
+website/src/generated/
+website/src/content/docs.generated.ts
+*.tsbuildinfo
+
+# Uploaded files and static export output
+data/
+out/
+
+# Packed packages and local files
+*.tgz
+.env*.local
+coverage/
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Verification reports (npm run verify)
+verify-report/

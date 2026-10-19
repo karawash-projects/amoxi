@@ -1,0 +1,4 @@
+#!/bin/sh
+# Refuses a commit message with AI co-author or session trailers.
+# Enable once per clone:  git config core.hooksPath scripts/git-hooks
+exec node scripts/check-commit-messages.mjs --file "$1"

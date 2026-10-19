@@ -1,0 +1,103 @@
+{
+  "name": "amoxi",
+  "version": "0.5.0",
+  "description": "Full-stack TypeScript framework for Node.js and AI agents: compile-time dependency injection, server-rendered JSX pages with islands, durable streaming agents with generative UI, MCP and A2A.",
+  "keywords": [
+    "framework",
+    "typescript",
+    "dependency-injection",
+    "ssr",
+    "islands",
+    "jsx",
+    "fullstack",
+    "micronaut",
+    "ai-agents",
+    "mcp",
+    "a2a",
+    "llm",
+    "generative-ui",
+    "rag"
+  ],
+  "homepage": "https://karawash-projects.github.io/amoxi/",
+  "bugs": {
+    "url": "https://github.com/karawash-projects/amoxi/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/karawash-projects/amoxi.git",
+    "directory": "packages/framework"
+  },
+  "license": "Apache-2.0",
+  "author": "Ahmad Karawash",
+  "main": "dist/runtime/index.js",
+  "types": "dist/runtime/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
+    },
+    "./ai": {
+      "types": "./dist/ai/index.d.ts",
+      "default": "./dist/ai/index.js"
+    },
+    "./jsx-runtime": {
+      "types": "./dist/runtime/jsx-runtime.d.ts",
+      "default": "./dist/runtime/jsx-runtime.js"
+    },
+    "./jsx-dev-runtime": {
+      "types": "./dist/runtime/jsx-runtime.d.ts",
+      "default": "./dist/runtime/jsx-runtime.js"
+    },
+    "./bin/amoxi.js": "./bin/amoxi.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "amoxi": "bin/amoxi.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "bin",
+    "src/client",
+    "ai",
+    "jsx-runtime",
+    "jsx-dev-runtime",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "node ../../scripts/check-package.mjs && npm run build",
+    "test": "node --test \"test/*.test.cjs\""
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "typescript": "~5.9.3",
+    "esbuild": "^0.25.0"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18",
+    "pg": ">=8"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "user-service",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "scripts": {
+    "aot": "amoxi build --verbose",
+    "build": "amoxi build && tsc -p tsconfig.json",
+    "start": "node dist/src/main.js",
+    "test": "npm run build && node --test \"dist/test/*.test.js\"",
+    "bundle": "npm run build && esbuild dist/src/main.js --bundle --platform=node --target=node18 --outfile=dist/app.js",
+    "start:bundle": "node dist/app.js",
+    "export": "amoxi export"
+  },
+  "dependencies": {
+    "amoxi": "*",
+    "react": "^19.3.0",
+    "react-colorful": "^5.8.1",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "~5.9.3"
+  },
+  "private": true
+}

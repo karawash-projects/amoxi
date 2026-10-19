@@ -1,0 +1,10 @@
+{
+  "amoxi": {
+    "management": { "enabled": false },
+    "log": { "format": "json" }
+  },
+  "server": {
+    "hsts": true,
+    "trust-proxy": true
+  }
+}

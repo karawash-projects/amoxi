@@ -1,0 +1,139 @@
+# Publishes amoxi and create-amoxi-app when a version tag (v1.2.3, or v1.2.3-rc.1 for a pre-release)
+# is pushed. Uses npm trusted publishing (OIDC), so no npm token is stored in GitHub, and npm
+# generates provenance automatically. See RELEASING.md for the one-time setup.
+#
+# Three jobs, so third-party code never runs while publish rights are held:
+#   build    installs dependencies, builds, tests and packs the two packages (read-only token)
+#   publish  only uploads the packed tarballs (id-token for npm, no checkout, no install)
+#   notes    creates the GitHub release from CHANGELOG.md
+# Every action is pinned to a full commit (the tag it was taken from is in the comment), and npm
+# to an exact version. Dependabot proposes action updates; the npm version is updated by hand.
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      dist-tag: ${{ steps.version.outputs.dist-tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Tag matches both package versions
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          FW=$(node -p "require('./packages/framework/package.json').version")
+          GEN=$(node -p "require('./packages/create-amoxi-app/package.json').version")
+          echo "tag=$TAG framework=$FW generator=$GEN"
+          test "$TAG" = "$FW" && test "$TAG" = "$GEN"
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          # A pre-release (1.2.0-rc.1) goes to the "next" dist-tag, so `npm install amoxi` keeps
+          # installing the latest stable version.
+          case "$TAG" in
+            *-*) echo "dist-tag=next" >> "$GITHUB_OUTPUT" ;;
+            *) echo "dist-tag=latest" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - run: npm run build
+      - run: npm test
+      - run: npm run check:licenses
+      - name: Package checks (license files, CLI line endings)
+        run: |
+          (cd packages/framework && node ../../scripts/check-package.mjs)
+          (cd packages/create-amoxi-app && node ../../scripts/check-package.mjs)
+      - name: Pack the packages
+        run: |
+          mkdir -p packed
+          npm pack -w amoxi -w create-amoxi-app --pack-destination packed
+          ls -l packed
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages
+          path: packed/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing and provenance
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Use an npm version that supports trusted publishing
+        run: npm install -g npm@11.21.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: packages
+          path: packed
+      - name: Publish
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          DIST_TAG: ${{ needs.build.outputs.dist-tag }}
+        run: |
+          for name in amoxi create-amoxi-app; do
+            file="packed/$name-$VERSION.tgz"
+            test -f "$file"
+            if npm view "$name@$VERSION" version >/dev/null 2>&1; then
+              echo "$name@$VERSION is already published"
+            else
+              npm publish "$file" --provenance --access public --tag "$DIST_TAG"
+            fi
+          done
+
+  notes:
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # create the GitHub release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Create the GitHub release from CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIST_TAG: ${{ needs.build.outputs.dist-tag }}
+        run: |
+          node -e "
+            const v = process.env.GITHUB_REF_NAME.slice(1);
+            const log = require('fs').readFileSync('CHANGELOG.md', 'utf8');
+            const start = log.indexOf('\n## ' + v);
+            const rest = start === -1 ? '' : log.slice(start + 1);
+            const next = rest.indexOf('\n## ', 1);
+            const body = (next === -1 ? rest : rest.slice(0, next)).split('\n').slice(1).join('\n').trim();
+            require('fs').writeFileSync('release-notes.md', body || 'See CHANGELOG.md.');
+          "
+          PRERELEASE=""
+          if [ "$DIST_TAG" = "next" ]; then PRERELEASE="--prerelease"; fi
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md --verify-tag $PRERELEASE

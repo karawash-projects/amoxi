@@ -1,0 +1,7 @@
+dist/
+src/generated/
+public/_amoxi/
+data/
+.amoxi/
+.env
+.env.*

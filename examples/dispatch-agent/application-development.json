@@ -1,0 +1,19 @@
+{
+  "ai": {
+    "mcp": {
+      "callers": {
+        "partner": "demo-mcp-token-not-a-secret"
+      }
+    },
+    "a2a": {
+      "callers": {
+        "partner": "demo-a2a-token-not-a-secret"
+      }
+    }
+  },
+  "dispatch": {
+    "telematics": {
+      "secret": "demo-telematics-secret-not-for-production"
+    }
+  }
+}

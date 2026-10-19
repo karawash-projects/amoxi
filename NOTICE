@@ -1,0 +1,10 @@
+Amoxi
+Copyright 2026 Ahmad Karawash
+
+This product includes software developed by Ahmad Karawash
+(https://github.com/karawash-projects/amoxi).
+
+The project website and the example apps include fonts licensed under the SIL Open
+Font License 1.1 (see the OFL text next to each font in their public/fonts folders):
+Schibsted Grotesk, Instrument Sans, Figtree, Bricolage Grotesque, Onest, IBM Plex Sans
+and IBM Plex Mono. They are not part of the published npm packages.

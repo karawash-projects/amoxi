@@ -1,0 +1,24 @@
+{
+  "app": {
+    "name": "Demo Bank",
+    "description": "An AI banking assistant: balances, spending insights, transfers with approval, card controls and fee questions."
+  },
+  "server": {
+    "port": 8081
+  },
+  "bank": {
+    "limits": {
+      "single-transfer-cents": 300000,
+      "daily-transfer-cents": 500000
+    }
+  },
+  "ai": {
+    "store": {
+      "type": "memory"
+    },
+    "mcp": {
+      "enabled": true,
+      "expose-agents": false
+    }
+  }
+}

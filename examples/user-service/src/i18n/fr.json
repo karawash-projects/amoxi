@@ -1,0 +1,44 @@
+{
+  "nav": {
+    "people": "Personnes",
+    "wiring": "Câblage",
+    "status": "État",
+    "language": "Langue"
+  },
+  "layout": {
+    "started": "Démarré en {ms} ms sur {platform}",
+    "skip": "Aller au contenu"
+  },
+  "people": {
+    "title": "Personnes",
+    "count": "{count, plural, =0 {Aucune personne} one {# personne} other {# personnes}}, gardées en mémoire jusqu'à l'arrêt du serveur.",
+    "recent": "Consultés récemment",
+    "select": "Choisissez une personne pour voir ses informations.",
+    "all": "Toutes les personnes",
+    "email": "E-mail",
+    "id": "Identifiant",
+    "added": "Ajoutée le",
+    "notFound": "Personne introuvable",
+    "notFoundText": "Il n'y a personne avec l'identifiant {id}. Elle a peut-être été supprimée."
+  },
+  "activity": {
+    "title": "Activité en direct"
+  },
+  "flash": {
+    "added": "Personne ajoutée",
+    "deleted": "Personne supprimée"
+  },
+  "errors": {
+    "notFound": "Page introuvable",
+    "notFoundText": "L'adresse est peut-être mal saisie, ou la page a été déplacée.",
+    "server": "Une erreur est survenue",
+    "serverText": "Le serveur n'a pas pu traiter cette demande. Réessayez dans un instant.",
+    "reference": "Si vous signalez ce problème, indiquez la référence {id}.",
+    "home": "Aller aux personnes"
+  },
+  "status": {
+    "accent": "Couleur d'accent",
+    "accentHex": "Hex",
+    "accentReset": "Réinitialiser"
+  }
+}

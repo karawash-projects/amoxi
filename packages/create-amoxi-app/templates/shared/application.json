@@ -1,0 +1,4 @@
+{
+  "app": { "name": "{{APP_NAME}}" },
+  "server": { "port": 8080 }
+}

@@ -1,0 +1,33 @@
+/* The assistant chat: uses the colours defined in app.css. */
+.assistant {
+  display: grid;
+  gap: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1rem;
+  min-height: 24rem;
+  align-content: start;
+}
+.conversation { display: grid; gap: 0.6rem; max-height: 60vh; overflow-y: auto; }
+.msg { margin: 0; padding: 0.6rem 0.8rem; border-radius: 10px; max-width: 85%; white-space: pre-wrap; line-height: 1.5; }
+.msg.user { justify-self: end; background: var(--accent); color: var(--accent-text); }
+.msg.assistant { background: var(--bg); }
+.msg.step, .msg.progress { color: var(--muted); font-size: 0.875rem; padding-block: 0.1rem; }
+.msg.error { color: var(--danger); }
+.msg.ui { max-width: 100%; padding: 0; }
+.msg.approval { border: 1px solid var(--accent); }
+.examples { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.examples button, .composer button, .approval button {
+  font: inherit; padding: 0.45rem 0.8rem; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer;
+}
+.composer { display: flex; gap: 0.5rem; }
+.composer input { flex: 1; font: inherit; padding: 0.55rem 0.75rem; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
+.composer button[type='submit'] { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.composer button:disabled { opacity: 0.6; cursor: default; }
+.note-cards h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+.note-cards ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.note-cards li { border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem 0.8rem; background: var(--surface); }
+.note-cards li p { margin: 0 0 0.25rem; }
+.note-cards time, .muted { color: var(--muted); font-size: 0.8rem; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

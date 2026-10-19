@@ -1,0 +1,10 @@
+{
+  "ai": {
+    "a2a": {
+      "token": "demo-clinic-partner-token-NOT-A-SECRET"
+    }
+  },
+  "clinic": {
+    "pseudonym-key": "demo-clinic-pseudonym-key-not-for-production"
+  }
+}

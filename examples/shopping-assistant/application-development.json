@@ -1,0 +1,10 @@
+{
+  "ai": {
+    "mcp": {
+      "token": "demo-store-mcp-token"
+    },
+    "a2a": {
+      "token": "demo-store-a2a-token"
+    }
+  }
+}

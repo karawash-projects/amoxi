@@ -1,0 +1,35 @@
+name: Bug report
+description: Something in Amoxi doesn't work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting. For security vulnerabilities, don't use this form; see SECURITY.md.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead. Include error messages and logs.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce
+      description: The smallest steps or code that show the problem, ideally starting from `npx create-amoxi-app@latest`.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Amoxi version
+      placeholder: "0.5.0"
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version and operating system
+      placeholder: "Node 22.14, Windows 11"
+    validations:
+      required: true

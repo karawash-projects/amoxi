@@ -1,0 +1,30 @@
+{
+  "app": {
+    "name": "Demo Freight",
+    "description": "An AI dispatch agent: long-running route planning, event-driven exception handling and approvals for fleet operations."
+  },
+  "server": {
+    "port": 8084
+  },
+  "ai": {
+    "mcp": {
+      "enabled": true
+    },
+    "a2a": {
+      "enabled": true
+    }
+  },
+  "dispatch": {
+    "planner": {
+      "step-ms": 650
+    },
+    "notify": {
+      "step-ms": 450
+    },
+    "schedule": {
+      "enabled": false,
+      "interval-ms": 86400000,
+      "depots": "Toronto,Montreal,Ottawa"
+    }
+  }
+}

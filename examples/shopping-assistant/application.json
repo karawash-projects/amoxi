@@ -1,0 +1,18 @@
+{
+  "app": {
+    "name": "Demo Outdoor Store",
+    "description": "An AI shopping assistant: product search and comparison as generative UI, sizes remembered, cart, orders and returns.",
+    "version": "1.0.0"
+  },
+  "server": {
+    "port": 8083
+  },
+  "ai": {
+    "mcp": {
+      "enabled": true
+    },
+    "a2a": {
+      "enabled": true
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "shopping-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "description": "An AI shopping assistant: product search and comparison as generative UI, sizes remembered, cart, orders and returns.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "amoxi dev",
+    "build": "amoxi build && tsc -p tsconfig.json",
+    "start": "amoxi start dist/src/main.js --workers 1",
+    "test": "npm run build && node --test \"dist/test/*.test.js\""
+  },
+  "dependencies": {
+    "amoxi": "*",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "~5.9.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

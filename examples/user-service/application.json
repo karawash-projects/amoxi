@@ -1,0 +1,7 @@
+{
+  "app": { "name": "user-service" },
+  "server": { "port": 8080, "static-dir": "public" },
+  "users": { "max-count": 500, "id-start": 1 },
+  "notifications": { "email": { "from": "team@amoxi.dev" } },
+  "amoxi": { "management": { "enabled": true } }
+}

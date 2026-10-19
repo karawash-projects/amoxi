@@ -29,7 +29,7 @@
 
    A pre-release tag such as `v0.6.0-rc.1` is published under the npm dist-tag `next` (and marked as a pre-release on GitHub), so `npm install amoxi` keeps installing the latest stable version.
 
-Every action in the workflows is pinned to a full commit, with the version it came from in a comment, and the release uses an exact npm version. Dependabot proposes updates for the actions (check the release notes before merging one); update the npm version in `release.yml` by hand.
+Every action in the workflows is pinned to a full commit, with the version it came from in a comment, and the release uses an exact npm version. Dependencies and actions are updated by hand, not by Dependabot (so every commit on `main` has a person as its author). Before a release, run `npm outdated` and check each action's releases; update what is behind in an ordinary commit, reading the release notes first, and update the npm version in `release.yml` the same way. GitHub's Dependabot alerts stay on, so known vulnerabilities are still reported.
 
 The workflow uses npm trusted publishing (OIDC): no npm token is stored in GitHub. Set it up once per package on npmjs.com under **Settings → Trusted publishing**: repository `karawash-projects/amoxi`, workflow `release.yml`. Trusted publishing is configured in each package's settings, so the packages must exist first (see below).
 

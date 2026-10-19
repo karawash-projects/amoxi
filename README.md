@@ -775,7 +775,7 @@ packages/framework/test/        framework tests (AI runtime, models, stores, pro
 packages/create-amoxi-app/   project generator with web, agent and api templates
 examples/                       sector examples (see below) and user-service, the core reference app
 website/                        the showcase site, an Amoxi app exported to GitHub Pages
-.github/                        CI (Windows, macOS, Linux), CodeQL, release, Pages, Dependabot, templates
+.github/                        CI (Windows, macOS, Linux), CodeQL, release, Pages, templates
 scripts/                        release checks (package contents, dependency licenses)
 bench/                          startup benchmark
 ```

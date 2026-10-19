@@ -7,7 +7,7 @@
 #   publish  only uploads the packed tarballs (id-token for npm, no checkout, no install)
 #   notes    creates the GitHub release from CHANGELOG.md
 # Every action is pinned to a full commit (the tag it was taken from is in the comment), and npm
-# to an exact version. Dependabot proposes action updates; the npm version is updated by hand.
+# to an exact version. Actions and npm are updated by hand (see RELEASING.md).
 name: Release
 
 on:

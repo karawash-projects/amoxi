@@ -4,6 +4,10 @@ All notable changes to `amoxi` and `create-amoxi-app` are documented here. Both 
 
 ## Unreleased
 
+### Fixes
+
+- **Windows: agent file stores no longer fail when several workers save at once.** Creating a lock file while another process is deleting it fails on Windows with `EPERM` rather than `EEXIST`; the shared vector store, memory and run store treated that as an error (a worker could crash while saving memories or claiming a run). It now means "the lock is busy, wait". Releasing a lock also retries on Windows, so a lock is no longer left behind for 10 seconds.
+
 ## 0.5.0
 
 AI agents, plus a security and reliability review of the whole framework and a verification suite that every release must pass. Apps that don't use `amoxi/ai` don't load it.

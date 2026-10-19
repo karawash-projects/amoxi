@@ -75,7 +75,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "typescript": "~5.9.3",
+    "typescript": "~7.0.2",
     "esbuild": "^0.25.0"
   },
   "peerDependencies": {

@@ -4,6 +4,10 @@ All notable changes to `amoxi` and `create-amoxi-app` are documented here. Both 
 
 ## Unreleased
 
+## 0.5.1
+
+A bug-fix release for Windows. Nothing changes for apps on macOS or Linux, and no code changes are needed to upgrade.
+
 ### Fixes
 
 - **Windows: agent file stores no longer fail when several workers save at once.** Creating a lock file while another process is deleting it fails on Windows with `EPERM` rather than `EEXIST`; the shared vector store, memory and run store treated that as an error (a worker could crash while saving memories or claiming a run). It now means "the lock is busy, wait". Releasing a lock also retries on Windows, so a lock is no longer left behind for 10 seconds.

@@ -101,7 +101,8 @@ jobs:
           DIST_TAG: ${{ needs.build.outputs.dist-tag }}
         run: |
           for name in amoxi create-amoxi-app; do
-            file="packed/$name-$VERSION.tgz"
+            # The ./ matters: npm reads "packed/name.tgz" as a GitHub repository (owner/repo) and tries to clone it.
+            file="./packed/$name-$VERSION.tgz"
             test -f "$file"
             if npm view "$name@$VERSION" version >/dev/null 2>&1; then
               echo "$name@$VERSION is already published"

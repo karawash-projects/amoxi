@@ -30,6 +30,9 @@ const HTTP_METHODS: Readonly<Record<string, string>> = {
 };
 const FRAMEWORK_FILE = /(node_modules[\\/]amoxi|packages[\\/]framework)[\\/]/;
 
+/** Marker types that stand in for parameter decorators (they work with standard decorators). */
+const PARAMETER_MARKERS = new Set(['PathParam', 'QueryParam', 'Header', 'Body', 'Multipart', 'Value', 'Named']);
+
 interface DecoratorInfo {
   readonly name: string;
   readonly args: readonly ts.Expression[];
@@ -771,6 +774,31 @@ class Analyzer {
     const decs = this.decorators(p);
     let optional = !!p.questionToken || !!p.initializer;
 
+    const marker = this.typeMarker(p);
+    if (marker && decs.some((d) => d.name === marker.name)) {
+      this.error(`Parameter '${paramName}' of '${owner}' uses both @${marker.name} and ${marker.name}<...>: use one`, loc);
+      return { kind: 'invalid', paramName };
+    }
+    if (marker?.name === 'Value') {
+      const coerce = this.coercion(p, `${owner}(${paramName})`);
+      const key = this.literalType(marker.args[1]);
+      if (!key || !key.trim()) {
+        this.error(`Value<...> on '${owner}(${paramName})' needs a configuration key, e.g. Value<number, 'server.port', 8080>`, loc);
+        return { kind: 'invalid', paramName };
+      }
+      const fallback = marker.args[2] ? this.literalType(marker.args[2]) : undefined;
+      if (marker.args[2] && fallback === undefined) {
+        this.error(`Value<...> on '${owner}(${paramName})': the default must be a string, number or boolean literal`, loc);
+        return { kind: 'invalid', paramName };
+      }
+      if (fallback !== undefined) this.checkLiteral(fallback, coerce, `default of Value<..., '${key}'>`, loc);
+      return { kind: 'value', paramName, key: key.trim(), fallback, coerce, loc };
+    }
+    if (marker && marker.name !== 'Named') {
+      this.error(`${marker.name}<...> on '${owner}(${paramName})' only applies to route parameters; constructor parameters take Value<...> or Named<...>`, loc);
+      return { kind: 'invalid', paramName };
+    }
+
     const value = decs.find((d) => d.name === 'Value');
     if (value) {
       const expr = this.literal(value.args[0]);
@@ -793,13 +821,21 @@ class Analyzer {
       return { kind: 'value', paramName, key: key.trim(), fallback, coerce, loc };
     }
 
-    const qualifier = this.stringArg(decs, 'Named');
+    let qualifier = this.stringArg(decs, 'Named');
     if (!p.type) {
       this.error(`Parameter '${paramName}' of '${owner}' needs an explicit type annotation (Amoxi resolves injection points statically)`, loc);
       return { kind: 'invalid', paramName };
     }
 
     let typeNode: ts.TypeNode = p.type;
+    if (marker?.name === 'Named') {
+      qualifier = this.literalType(marker.args[1]);
+      if (!qualifier || !marker.args[0]) {
+        this.error(`Named<...> on '${owner}(${paramName})' needs a type and a name, e.g. Named<Greeter, 'formal'>`, loc);
+        return { kind: 'invalid', paramName };
+      }
+      typeNode = marker.args[0];
+    }
     let many = false;
     let provider = false;
     if (ts.isTypeReferenceNode(typeNode) && typeNode.typeArguments?.length === 1) {
@@ -834,7 +870,7 @@ class Analyzer {
     if (!symbol || !this.isNominal(symbol)) {
       this.error(
         `Cannot inject parameter '${paramName}' of '${owner}': '${typeNode.getText()}' is not a class, interface or type alias. ` +
-          `Use @Value('\${key}') for configuration values.`,
+          `Use Value<T, 'key'> (or @Value('\${key}')) for configuration values.`,
         loc,
       );
       return { kind: 'invalid', paramName };
@@ -868,15 +904,25 @@ class Analyzer {
 
     const params: RouteParam[] = method.parameters.map((p) => {
       const pname = p.name.getText();
-      const optional = !!p.questionToken || !!p.initializer || (!!p.type && ts.isUnionTypeNode(p.type) && p.type.types.some(isNullishTypeNode));
+      const inner = this.typeMarker(p)?.args[0] ?? p.type;
+      const optional = !!p.questionToken || !!p.initializer || (!!inner && ts.isUnionTypeNode(inner) && inner.types.some(isNullishTypeNode));
       const decs = this.decorators(p);
-      const find = (n: string): DecoratorInfo | undefined => decs.find((d) => d.name === n);
+      const marker = this.typeMarker(p);
+      if (marker && decs.some((d) => d.name === marker.name)) {
+        this.error(`Parameter '${pname}' of ${where} uses both @${marker.name} and ${marker.name}<...>: use one`, this.loc(p));
+      }
+      if (marker && (marker.name === 'Value' || marker.name === 'Named')) {
+        this.error(`${marker.name}<...> on '${pname}' of ${where}: route parameters take PathParam, QueryParam, Header, Body or Multipart`, this.loc(p));
+        return { kind: 'context' };
+      }
+      // A marker type works like the decorator of the same name; its second type argument is the name.
+      const find = (n: string): DecoratorInfo | undefined => decs.find((d) => d.name === n) ?? this.markerAsDecorator(marker, n);
 
       const pp = find('PathParam');
       if (pp) {
         const name = this.literal(pp.args[0]) ?? pname;
         if (!pathParams.has(name)) {
-          this.error(`@PathParam('${name}') in ${where}: route '${httpMethod} ${fullPath}' has no ':${name}' segment`, this.loc(p));
+          this.error(`Path parameter '${name}' in ${where}: route '${httpMethod} ${fullPath}' has no ':${name}' segment`, this.loc(p));
         }
         return { kind: 'path', name, coerce: this.coercion(p, where), required: true };
       }
@@ -889,11 +935,11 @@ class Analyzer {
         return { kind: 'header', name: (this.literal(hp.args[0]) ?? pname).toLowerCase(), coerce: this.coercion(p, where), required: !optional };
       }
       if (find('Multipart')) {
-        if (httpMethod === 'GET') this.error(`@Multipart in ${where}: GET requests have no body`, this.loc(p));
+        if (httpMethod === 'GET') this.error(`Multipart in ${where}: GET requests have no body`, this.loc(p));
         return { kind: 'multipart' };
       }
       if (find('Body')) {
-        if (httpMethod === 'GET') this.error(`@Body in ${where}: GET requests have no body`, this.loc(p));
+        if (httpMethod === 'GET') this.error(`Body in ${where}: GET requests have no body`, this.loc(p));
         if (!p.type) return { kind: 'body' };
         const bodyType = this.checker.getTypeFromTypeNode(p.type);
         const schema = this.schemaOf(bodyType, `${where} body`, this.loc(p));
@@ -902,7 +948,11 @@ class Analyzer {
       }
       if (p.type && p.type.getText() === 'RequestContext') return { kind: 'context' };
 
-      this.error(`Parameter '${pname}' of ${where} needs @PathParam, @QueryParam, @Header or @Body (or type RequestContext)`, this.loc(p));
+      this.error(
+        `Parameter '${pname}' of ${where} needs a binding: PathParam<T>, QueryParam<T>, Header<T, 'name'>, Body<T> or Multipart ` +
+          `(or @PathParam, @QueryParam, @Header, @Body, @Multipart with experimentalDecorators), or type RequestContext`,
+        this.loc(p),
+      );
       return { kind: 'context' };
     });
 
@@ -928,7 +978,7 @@ class Analyzer {
       else cache = { ttl, swr };
     }
     if (params.some((p) => p.kind === 'multipart') && params.some((p) => p.kind === 'body')) {
-      this.error(`${where} can't use both @Body and @Multipart`, loc);
+      this.error(`${where} can't take both a JSON body and a multipart form`, loc);
     }
 
     // OpenAPI metadata: JSDoc and the response type (Promise<T> and HttpResponse<T> unwrapped).
@@ -1153,6 +1203,46 @@ class Analyzer {
       const name = ts.isPropertyAccessExpression(callee) ? callee.name.text : callee.getText();
       return { name, args: ts.isCallExpression(e) ? e.arguments : [] };
     });
+  }
+
+  /**
+   * A parameter typed with one of Amoxi's marker types (`PathParam<number>`, `Body<NewNote>`,
+   * `Value<number, 'server.port', 8080>`...), the standard-decorators replacement for parameter
+   * decorators. Resolved through the symbol, so renamed imports work and look-alikes don't match.
+   */
+  private typeMarker(p: ts.ParameterDeclaration): { name: string; args: readonly ts.TypeNode[] } | undefined {
+    let t = p.type;
+    if (!t) return undefined;
+    // `verbose?: QueryParam<boolean> | undefined`
+    if (ts.isUnionTypeNode(t)) {
+      const rest = t.types.filter((x) => !isNullishTypeNode(x));
+      if (rest.length !== 1) return undefined;
+      t = rest[0];
+    }
+    if (!ts.isTypeReferenceNode(t)) return undefined;
+    const sym = this.resolveSymbol(this.checker.getSymbolAtLocation(t.typeName));
+    const name = sym?.getName();
+    if (!name || !PARAMETER_MARKERS.has(name)) return undefined;
+    if (!sym?.declarations?.some((d) => ts.isTypeAliasDeclaration(d) && FRAMEWORK_FILE.test(d.getSourceFile().fileName))) return undefined;
+    return { name, args: t.typeArguments ?? [] };
+  }
+
+  /** The decorator a marker type stands for, with its name argument taken from the second type argument. */
+  private markerAsDecorator(marker: { name: string; args: readonly ts.TypeNode[] } | undefined, name: string): DecoratorInfo | undefined {
+    if (marker?.name !== name) return undefined;
+    const label = marker.args[1] ? this.literalType(marker.args[1]) : undefined;
+    return { name, args: label === undefined ? [] : [ts.factory.createStringLiteral(label)] };
+  }
+
+  /** The value of a literal type argument: `'server.port'`, `8080`, `-1`, `true`. */
+  private literalType(node: ts.TypeNode | undefined): string | undefined {
+    if (!node || !ts.isLiteralTypeNode(node)) return undefined;
+    const lit = node.literal;
+    if (ts.isStringLiteral(lit) || ts.isNoSubstitutionTemplateLiteral(lit) || ts.isNumericLiteral(lit)) return lit.text;
+    if (lit.kind === ts.SyntaxKind.TrueKeyword) return 'true';
+    if (lit.kind === ts.SyntaxKind.FalseKeyword) return 'false';
+    if (ts.isPrefixUnaryExpression(lit) && lit.operator === ts.SyntaxKind.MinusToken && ts.isNumericLiteral(lit.operand)) return `-${lit.operand.text}`;
+    return undefined;
   }
 
   private literal(expr: ts.Expression | undefined): string | undefined {

@@ -7,7 +7,9 @@
  * registered or reflected at runtime.
  */
 
-const marker = ((): void => undefined) as unknown as ClassDecorator & MethodDecorator;
+import type { ClassMarker, MethodMarker } from '../runtime/decorators';
+
+const marker = ((): void => undefined) as unknown as ClassMarker & MethodMarker;
 
 export interface AgentOptions {
   /** URL-safe name used in /agents/<name>; defaults to the class name in kebab-case. */
@@ -38,7 +40,7 @@ export interface AgentOptions {
  * tools come from its own @Tool methods and the `tools` classes. Amoxi exposes it at
  * /agents/<name> with streaming, durable runs and human approvals.
  */
-export function Agent(_options?: AgentOptions): ClassDecorator {
+export function Agent(_options?: AgentOptions): ClassMarker {
   return marker;
 }
 
@@ -68,6 +70,6 @@ export interface ToolOptions {
  *   @Tool('Looks up the balance of one of the customer\'s accounts')
  *   balance(input: { accountId: string }, ctx: ToolContext): Promise<Balance> { ... }
  */
-export function Tool(_descriptionOrOptions?: string | ToolOptions): MethodDecorator {
+export function Tool(_descriptionOrOptions?: string | ToolOptions): MethodMarker {
   return marker;
 }

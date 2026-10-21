@@ -25,3 +25,6 @@ Thumbs.db
 
 # Verification reports (npm run verify)
 verify-report/
+
+# Temporary projects created by the framework tests
+.tmp-marker-tests/

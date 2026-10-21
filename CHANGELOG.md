@@ -4,6 +4,10 @@ All notable changes to `amoxi` and `create-amoxi-app` are documented here. Both 
 
 ## Unreleased
 
+## 0.6.0
+
+Amoxi now works with standard decorators, so `experimentalDecorators` is no longer needed. Nothing breaks: apps that use the flag keep working unchanged.
+
 ### Standard decorators
 
 - **`experimentalDecorators` is no longer needed.** Amoxi works with standard decorators, the TypeScript 5 default. Standard decorators can't be placed on parameters, so each parameter decorator now has a type of the same name that marks the parameter instead, and is just its plain type inside the method: `PathParam<number>`, `QueryParam<boolean>`, `Header<string, 'x-request-id'>`, `Body<NewNote>`, `Multipart`, `Value<number, 'server.port', 8080>` and `Named<Greeter, 'formal'>`. `amoxi build` reads them from the source like the decorators, resolving renamed imports, and checks them with the same rules.

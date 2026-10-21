@@ -1,6 +1,6 @@
 {
   "name": "create-amoxi-app",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Create an Amoxi app: npx create-amoxi-app@latest my-app",
   "keywords": [
     "amoxi",

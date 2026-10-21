@@ -43,7 +43,8 @@ function analyze(files, { experimentalDecorators }) {
   const graph = validateGraph(analysis.beans);
   const typeErrors = ts
     .getPreEmitDiagnostics(analysis.program)
-    .filter((d) => d.file && d.file.fileName.startsWith(dir))
+    // TypeScript reports paths with forward slashes, also on Windows: compare normalized paths.
+    .filter((d) => d.file && path.normalize(d.file.fileName).startsWith(path.normalize(dir) + path.sep))
     .map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n'));
   const errors = [...analysis.diagnostics, ...graph.diagnostics].map((d) => d.message);
   const bean = (name) => analysis.beans.find((b) => b.name === name);

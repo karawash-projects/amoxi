@@ -4,6 +4,13 @@ All notable changes to `amoxi` and `create-amoxi-app` are documented here. Both 
 
 ## Unreleased
 
+### Fixes
+
+- **Agent template: chat messages are sized to their text.** The chat panel and the assistant's messages shared the class name `assistant`, so every answer took the panel's 24rem height. The panel is now `.chat` and answers are `.msg.answer`. To fix an app created with 0.6.0 or earlier, rename the panel's class in `src/islands/Assistant.tsx` and `src/styles/assistant.css`.
+- **Agent template: what the agent says just before using a tool** ("Let me check that.") is shown as a quiet status line next to the tool step; only answers get a bubble.
+- **Agent template: the chat follows the newest message** while answers stream in, unless the reader has scrolled up.
+- The verification suite opens the agent template's chat in a browser and checks message sizes, narration and scrolling.
+
 ## 0.6.0
 
 Amoxi now works with standard decorators, so `experimentalDecorators` is no longer needed. Nothing breaks: apps that use the flag keep working unchanged.

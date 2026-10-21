@@ -75,6 +75,22 @@ To work on Amoxi itself, or try unreleased changes, see [CONTRIBUTING.md](CONTRI
 
 Decorators are no-op functions at runtime: no `reflect-metadata`, no `emitDecoratorMetadata`. Everything they describe is turned into ordinary code in `src/generated/amoxi.generated.ts`, which `tsc` then type-checks a second time.
 
+### Standard decorators
+
+Amoxi works with standard decorators, the TypeScript 5 default, so `experimentalDecorators` is not needed. Standard decorators can't be placed on parameters, so parameters are marked with types of the same name instead; inside the method each one is just its plain type:
+
+| Parameter | Type (standard decorators) | Decorator (`experimentalDecorators`) |
+|---|---|---|
+| Path segment | `id: PathParam<number>`, `PathParam<string, 'orderId'>` | `@PathParam() id: number` |
+| Query string | `page?: QueryParam<number>` | `@QueryParam() page?: number` |
+| Header | `requestId: Header<string, 'x-request-id'>` | `@Header('x-request-id') requestId: string` |
+| JSON body | `body: Body<NewUser>` | `@Body() body: NewUser` |
+| File upload | `form: Multipart` | `@Multipart() form: MultipartForm` |
+| Configuration | `port: Value<number, 'server.port', 8080>` | `@Value('${server.port:8080}') port: number` |
+| Named bean | `audit: Named<Notifier, 'log'>` | `@Named('log') audit: Notifier` |
+
+New projects use the types. Projects with `experimentalDecorators` can keep the decorators, or use both styles side by side.
+
 ---
 
 ## Backend
@@ -87,7 +103,7 @@ export class UserService {
   constructor(
     private readonly repository: UserRepository,                 // interface, resolved at build time
     private readonly notifications: NotificationService,
-    @Value('${users.max-count:1000}') private readonly maxUsers: number,
+    private readonly maxUsers: Value<number, 'users.max-count', 1000>,
   ) {}
 }
 
@@ -97,7 +113,7 @@ export class UserService {
 export class NotificationService {
   constructor(
     private readonly notifiers: readonly Notifier[],   // every Notifier
-    @Named('log') private readonly audit: Notifier,     // exactly one
+    private readonly audit: Named<Notifier, 'log'>,    // exactly one
   ) {}
 }
 
@@ -107,7 +123,7 @@ export class InfrastructureFactory {
 }
 ```
 
-Available: `@Singleton`, `@Prototype`, `@Eager`, `@Primary`, `@Named`, `@Factory` + `@Bean`, `@Value`, `@PostConstruct`, `@PreDestroy`, optional (`param?: T`) and collection (`T[]`) injection, and injecting `ApplicationContext` itself.
+Available: `@Singleton`, `@Prototype`, `@Eager`, `@Primary`, `@Named` (on beans) and `Named<T, 'name'>` (on parameters), `@Factory` + `@Bean`, `Value<T, 'key', default>`, `@PostConstruct`, `@PreDestroy`, optional (`param?: T`) and collection (`T[]`) injection, and injecting `ApplicationContext` itself.
 
 The generated code for a bean is a plain constructor call:
 
@@ -122,14 +138,14 @@ beans.push({ id: 7, name: "NotificationService", /* ... */
 @Controller('/users')
 export class UserController {
   @Get('/:id')
-  get(@PathParam() id: number) { ... }          // "abc" → 400, coerced by generated code
+  get(id: PathParam<number>) { ... }            // "abc" → 400, coerced by generated code
 
   @Get()
   @Cached(30, { staleWhileRevalidate: 60 })
-  list(@QueryParam() limit?: number) { ... }
+  list(limit?: QueryParam<number>) { ... }
 
   @Post()
-  create(@Body() body: NewUser) { ... }          // validated from the NewUser type
+  create(body: Body<NewUser>) { ... }            // validated from the NewUser type
 }
 
 @Middleware(0)
@@ -149,9 +165,9 @@ Handlers return a value (sent as JSON), a string, `HttpResponse` (`created`, `re
 
 ```
 error AMOXI: src/app.ts:10 - Multiple beans of type 'PaymentGateway' match parameter 'gateway' of 'OrderService':
-              StripeGateway, PaypalGateway. Add @Named('...') to the parameter, mark one bean @Primary, or inject 'PaymentGateway[]'
+              StripeGateway, PaypalGateway. Add Named<PaymentGateway, '...'> (or @Named('...')) to the parameter, mark one bean @Primary, or inject 'PaymentGateway[]'
 error AMOXI: src/app.ts:13 - Circular dependency: A -> B -> C -> A.
-error AMOXI: src/app.ts:21 - @PathParam('id') in OrderController.get(): route 'GET /orders/:orderId' has no ':id' segment
+error AMOXI: src/app.ts:21 - Path parameter 'id' in OrderController.get(): route 'GET /orders/:orderId' has no ':id' segment
 error AMOXI: src/islands/Leaky.tsx:2 - Browser bundle: Could not resolve "node:fs" (islands run in the browser and may only import browser-safe code)
 error AMOXI: src/controller/user-controller.ts:24 - UserController.create() body.email: unknown @format 'mail' (use email, url, uuid, date or date-time)
 ```
@@ -175,7 +191,7 @@ export class AppPages {
   constructor(private readonly users: UserService) {}
 
   @Page('/people/:id')
-  person(@PathParam() id: number, ctx: RequestContext) {
+  person(id: PathParam<number>, ctx: RequestContext) {
     const user = this.users.get(id);
     if (!user) return withStatus(404, <NotFound />);
     return (
@@ -285,7 +301,7 @@ export interface NewUser {
 }
 ```
 
-`@Body() body: NewUser` gets a validator generated at build time: types, required/optional fields, literal unions, arrays, nested objects, nullable values and records, plus `@minLength`, `@maxLength`, `@pattern`, `@format` (email, url, uuid, date, date-time), `@minimum`, `@maximum`, `@integer`, `@minItems` and `@maxItems`. Failures return 400 with every problem:
+`body: Body<NewUser>` (or `@Body() body: NewUser`) gets a validator generated at build time: types, required/optional fields, literal unions, arrays, nested objects, nullable values and records, plus `@minLength`, `@maxLength`, `@pattern`, `@format` (email, url, uuid, date, date-time), `@minimum`, `@maximum`, `@integer`, `@minItems` and `@maxItems`. Failures return 400 with every problem:
 
 ```json
 { "error": "Invalid request body",
@@ -563,7 +579,7 @@ A dependency-free RFC 6455 implementation: masking, fragmentation, ping/pong hea
 
 ```ts
 @Post('/users/:id/avatar')
-async upload(@PathParam() id: number, @Multipart() form: MultipartForm) {
+async upload(id: PathParam<number>, form: Multipart) {
   const file = form.file('avatar');          // { filename, contentType, size, path, read(), moveTo() }
   await file?.moveTo(`data/avatars/${id}.png`);
 }

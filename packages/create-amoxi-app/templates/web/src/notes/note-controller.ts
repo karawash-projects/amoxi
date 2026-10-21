@@ -11,9 +11,10 @@ export class NoteController {
     return this.notes.list();
   }
 
-  // Invalid bodies are rejected with a 400 listing every problem before this runs.
+  // Body<NewNote> is the JSON request body, validated against the NewNote type: invalid
+  // bodies are rejected with a 400 listing every problem before this runs.
   @Post()
-  create(@Body() body: NewNote): HttpResponse<Note> {
+  create(body: Body<NewNote>): HttpResponse<Note> {
     return HttpResponse.created(this.notes.add(body));
   }
 }

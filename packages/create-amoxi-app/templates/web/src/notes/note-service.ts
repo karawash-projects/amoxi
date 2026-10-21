@@ -7,7 +7,7 @@ export class NoteService {
   private readonly notes: Note[] = [];
   private nextId = 1;
 
-  constructor(@Value('${notes.max:100}') private readonly max: number) {}
+  constructor(private readonly max: Value<number, 'notes.max', 100>) {}
 
   @PostConstruct()
   seed(): void {

@@ -123,7 +123,7 @@ export function validateGraph(beans: readonly BeanModel[]): ResolvedGraph {
             diagnostics.push({
               message:
                 `Multiple beans of type '${inj.typeName}'${named} match parameter '${inj.paramName}' of '${bean.name}': ` +
-                `${candidates.map((b) => b.name).join(', ')}. Add @Named('...') to the parameter, mark one bean @Primary, ` +
+                `${candidates.map((b) => b.name).join(', ')}. Add Named<${inj.typeName}, '...'> (or @Named('...')) to the parameter, mark one bean @Primary, ` +
                 `or inject '${inj.typeName}[]' to receive all of them.`,
               loc: inj.loc,
             });

@@ -4,6 +4,10 @@ All notable changes to `amoxi` and `create-amoxi-app` are documented here. Both 
 
 ## Unreleased
 
+## 0.6.1
+
+A fix for the chat in apps created from the agent template. The framework itself is unchanged.
+
 ### Fixes
 
 - **Agent template: chat messages are sized to their text.** The chat panel and the assistant's messages shared the class name `assistant`, so every answer took the panel's 24rem height. The panel is now `.chat` and answers are `.msg.answer`. To fix an app created with 0.6.0 or earlier, rename the panel's class in `src/islands/Assistant.tsx` and `src/styles/assistant.css`.

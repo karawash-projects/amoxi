@@ -12,7 +12,7 @@
    ```
 
    It must end with `PASSED`; attach `verify-report/report.md` to the release notes if you like.
-2. Move the "Unreleased" entries in `CHANGELOG.md` under a new version heading.
+2. Move the "Unreleased" entries in `CHANGELOG.md` under a new version heading. For a new minor version (0.6.0, 0.7.0), also update the supported versions in `SECURITY.md`; the verification suite checks both.
 3. Bump both packages and push the tag:
 
    ```bash

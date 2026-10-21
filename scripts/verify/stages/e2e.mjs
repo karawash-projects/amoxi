@@ -8,7 +8,7 @@ import { APPS, loadModule, pagePaths } from '../lib/apps.mjs';
 import { startProduction } from './production.mjs';
 
 /** Playwright, if the project (or PLAYWRIGHT_MODULE) provides it. It's optional. */
-function loadPlaywright(root) {
+export function loadPlaywright(root) {
   const req = createRequire(path.join(root, 'package.json'));
   for (const id of [process.env.PLAYWRIGHT_MODULE, 'playwright', 'playwright-core'].filter(Boolean)) {
     try {

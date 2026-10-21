@@ -5,6 +5,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { Client } from '../lib/http.mjs';
 import { freePort, run, ServerProcess } from '../lib/proc.mjs';
+import { loadPlaywright } from './e2e.mjs';
 
 const pack = async (ctx, workspace, dest) => {
   const r = await run('npm', ['pack', '-w', workspace, '--json', '--pack-destination', dest], { cwd: ctx.root });
@@ -171,6 +172,48 @@ export const scaffold = {
           ctx.assert.equal(exit.code, 0, `exit code ${exit.code} ${exit.signal ?? ''}\n${server.tail()}`);
         }
       });
+      const pw = template === 'agent' ? loadPlaywright(ctx.root) : undefined;
+      if (pw) {
+        await ctx.check('agent: in a browser, answers are bubbles sized to their text, narration is a status line, and the chat follows the newest message', async () => {
+          const port = await freePort();
+          const server = await ServerProcess.start(name, [path.join(dir, 'node_modules', 'amoxi', 'bin', 'amoxi.js'), 'start', 'dist/src/main.js', '--workers', '1'], {
+            cwd: dir,
+            env: { SERVER_PORT: String(port), NODE_ENV: 'production' },
+            readyUrl: `http://127.0.0.1:${port}/amoxi/health/ready`,
+          });
+          const browser = await pw.chromium.launch({ timeout: 60_000 });
+          try {
+            const page = await browser.newPage({ viewport: { width: 1440, height: 700 } });
+            page.setDefaultTimeout(20_000);
+            await page.goto(`http://127.0.0.1:${port}/assistant`);
+            const ask = async (n) => {
+              await page.click(`.examples button >> nth=${n}`);
+              await page.waitForSelector('.composer button[type=submit]:not([disabled])');
+              await page.waitForTimeout(300);
+            };
+            // Enough turns that the conversation has to scroll.
+            await ask(0);
+            await ask(1);
+            await ask(0);
+            await ask(0);
+            const r = await page.evaluate(() => {
+              const log = document.querySelector('.conversation');
+              const box = (sel) => [...log.querySelectorAll(sel)].map((e) => Math.round(e.getBoundingClientRect().height));
+              return { texts: box('.msg:not(.ui):not(.approval)'), answers: box('.msg.answer'), narration: box('.msg.narration'), fromBottom: Math.round(log.scrollHeight - log.scrollTop - log.clientHeight) };
+            });
+            // Every text message (whatever its class) is sized to its text: none takes the chat panel's height.
+            ctx.assert.ok(r.texts.length >= 8 && r.texts.every((h) => h < 120), `message too tall: ${JSON.stringify(r)}`);
+            ctx.assert.ok(r.answers.length >= 4, `answers: ${JSON.stringify(r)}`);
+            // A one-line answer is about 45 px; a message styled like the chat panel would be 384 px.
+            ctx.assert.ok(r.answers.every((h) => h < 120), `answer bubbles too tall: ${JSON.stringify(r)}`);
+            ctx.assert.ok(r.narration.length >= 3 && r.narration.every((h) => h < 60), `narration lines: ${JSON.stringify(r)}`);
+            ctx.assert.ok(r.fromBottom <= 5, `the chat is not at the newest message: ${JSON.stringify(r)}`);
+          } finally {
+            await browser.close();
+            await server.stop();
+          }
+        });
+      }
     }
   },
 };

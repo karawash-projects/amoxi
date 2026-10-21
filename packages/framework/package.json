@@ -1,6 +1,6 @@
 {
   "name": "amoxi",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Full-stack TypeScript framework for Node.js and AI agents: compile-time dependency injection, server-rendered JSX pages with islands, durable streaming agents with generative UI, MCP and A2A.",
   "keywords": [
     "framework",

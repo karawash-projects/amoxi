@@ -6,7 +6,7 @@ import { appendFile, link, mkdir, open, readdir, readFile, rename, stat, unlink,
 import { join } from 'node:path';
 import { isLockBusy, readFileRetry, retryOnWindows, withFileLock, writeAtomic } from './fs-retry';
 import { matchesCondition, RunConflictError, TERMINAL_STATUSES, type RunEvent, type RunRecord, type RunStore, type RunUpdateCondition } from '../types';
-import { isClaimable, parseStaleBefore } from './memory-run-store';
+import { claimedFrom, isClaimable, parseStaleBefore } from './memory-run-store';
 
 /** A file name for an id: the id itself when safe, else a hash (no path traversal). */
 function safeName(id: string): string {
@@ -231,7 +231,7 @@ export class FileRunStore implements RunStore {
         const run = await this.read(name);
         if (!run || !isClaimable(run, staleMs)) return undefined;
         const now = new Date().toISOString();
-        const next: RunRecord = { ...run, status: 'running', workerId, heartbeatAt: now, updatedAt: now, startedAt: run.startedAt ?? now, revision: (run.revision ?? 0) + 1 };
+        const next: RunRecord = { ...run, status: 'running', workerId, heartbeatAt: now, updatedAt: now, startedAt: run.startedAt ?? now, revision: (run.revision ?? 0) + 1, ...claimedFrom(run) };
         await writeAtomic(this.runFile(name), JSON.stringify(next));
         return next;
       });

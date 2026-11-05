@@ -146,7 +146,10 @@ export class PgRunStore implements RunStore {
          record = record || jsonb_build_object(
            'status', 'running', 'workerId', $1::text, 'heartbeatAt', $3::text, 'updatedAt', $3::text,
            'startedAt', COALESCE(record->'startedAt', to_jsonb($3::text)),
-           'revision', COALESCE((record->>'revision')::bigint, 0) + 1)
+           'revision', COALESCE((record->>'revision')::bigint, 0) + 1,
+           -- SET expressions see the row before the update: a stale 'running' run is a takeover.
+           'claimedFrom', CASE WHEN status = 'running' THEN 'stalled' ELSE 'queued' END,
+           'takeovers', COALESCE((record->>'takeovers')::int, 0) + CASE WHEN status = 'running' THEN 1 ELSE 0 END)
        WHERE id = (
          SELECT id FROM ${this.runs}
          WHERE status = 'queued' OR (status = 'running' AND (heartbeat_at IS NULL OR heartbeat_at < $4::timestamptz))

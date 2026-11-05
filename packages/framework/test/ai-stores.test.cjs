@@ -69,7 +69,7 @@ function run(overrides = {}) {
   return {
     id: `run-${counter}-${Math.random().toString(36).slice(2, 8)}`,
     agent: 'support',
-    threadId: 'thread-1',
+    threadId: `thread-${counter}`, // one thread per run: PostgreSQL allows one unfinished run per thread
     owner: 'owner-1',
     status: 'queued',
     input: 'hello',
@@ -139,6 +139,14 @@ function runStoreSuite(name, make) {
         assert.equal(b.id, a.id, 'worker-b took over the run worker-a held');
         await assert.rejects(store.update(a.id, { turns: 9 }, { workerId: 'worker-a' }), (e) => e instanceof RunConflictError);
         assert.equal((await store.update(a.id, { turns: 2 }, { workerId: 'worker-b' })).turns, 2);
+        // The claim records how it got the run: a takeover is counted, a hand-off through the queue is not.
+        assert.deepEqual([a.claimedFrom, a.takeovers], ['queued', 0], 'first claim of a queued run');
+        assert.deepEqual([b.claimedFrom, b.takeovers], ['stalled', 1], 'taken over from a stalled worker');
+        await store.update(b.id, { status: 'queued', workerId: undefined }, { workerId: 'worker-b' });
+        const c = await store.claim('worker-c', new Date(Date.now() - 60_000).toISOString());
+        assert.equal(c.id, b.id);
+        assert.deepEqual([c.claimedFrom, c.takeovers], ['queued', 1], 'a graceful hand-off is not a takeover; the count is kept');
+        assert.deepEqual([(await store.get(c.id)).claimedFrom, (await store.get(c.id)).takeovers], ['queued', 1], 'stored, not only returned');
         // Concurrent compare-and-sets from one starting point: exactly one succeeds.
         const r2 = run({ status: 'queued' });
         await store.create(r2);

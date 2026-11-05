@@ -4,6 +4,14 @@ All notable changes to `amoxi` and `create-amoxi-app` are documented here. Both 
 
 ## Unreleased
 
+### Agents
+
+- **Takeovers are visible.** When a worker stops renewing its lease and another worker resumes the run, Amoxi logs a warning, the `run.status` event carries `takenOver: true` and `takeovers`, and the run records `claimedFrom` (`'queued'` or `'stalled'`) and `takeovers`, a count you can alert on. The README explains how leases work and gives SQL for spotting stuck leases and runs taken over repeatedly with PostgreSQL.
+
+### Tests
+
+- The run store tests now pass on PostgreSQL: they used one thread for every run, which PostgreSQL rejects because a thread has at most one unfinished run.
+
 ## 0.6.1
 
 A fix for the chat in apps created from the agent template. The framework itself is unchanged.

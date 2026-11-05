@@ -92,7 +92,16 @@ export class AgentLoop {
       if (!def) throw new Error(`Unknown agent '${run.agent}'`);
       const behavior = this.deps.context.get<AgentBehavior>(def.beanId);
       if (!run.startedAt) run = await runs.update(run.id, { startedAt: now() });
-      journal.emit('run.status', { status: 'running', runId: run.id, threadId: run.threadId });
+      if (run.claimedFrom === 'stalled') {
+        // The previous worker stopped heartbeating (crashed or stalled): worth an alert if it repeats.
+        logger.warn('Run taken over from a worker that stopped responding', { runId: run.id, agent: run.agent, takeovers: run.takeovers ?? 1 });
+      }
+      journal.emit('run.status', {
+        status: 'running',
+        runId: run.id,
+        threadId: run.threadId,
+        ...(run.claimedFrom === 'stalled' ? { takenOver: true, takeovers: run.takeovers ?? 1 } : {}),
+      });
 
       const memory = this.deps.memory().for(memorySubject(run));
       const memories: MemoryItem[] = def.recall > 0 ? await memory.recall(run.input, { limit: def.recall, minScore: 0.25 }).catch(() => []) : [];

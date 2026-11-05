@@ -483,6 +483,10 @@ describe('long-running and durable runs', () => {
         return r.status === 'completed' && r;
       });
       assert.equal(done.output, 'Recovered.');
+      // The takeover is recorded on the run and announced in its event stream, so it can be alerted on.
+      assert.deepEqual([done.claimedFrom, done.takeovers], ['stalled', 1]);
+      const running = (await stores.runs.events('crashed', 0)).filter((e) => e.type === 'run.status' && e.data.status === 'running');
+      assert.deepEqual(running.map((e) => [e.data.takenOver, e.data.takeovers]), [[true, 1]]);
     } finally {
       await t.app.close();
     }

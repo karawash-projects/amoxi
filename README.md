@@ -423,6 +423,20 @@ export class BankingAssistant {
 
 A message starts a **run**, which executes in a background worker, not in the HTTP request, so it can take minutes. Every model turn and tool result is checkpointed: if the server stops or crashes mid-run, the run resumes on the next start (or on another worker) from its last step. A tool call that was interrupted part-way is never repeated blindly: by default the model is told the action may or may not have completed. Mark a tool `@Tool({ idempotent: true })` when it is safe to run again, typically because its side effects are wrapped in `ctx.step('key', fn)`: on resume it runs again, and each completed step returns its recorded result instead of running a second time. For a system of your own that takes an idempotency key, use `ctx.callId`: it is the same when an interrupted call runs again, and different for every new call, so asking twice for the same transfer in one conversation really makes two.
 
+A worker holds each run it executes with a **lease** that it renews every `ai.runs.lease-ms / 3` (10 seconds by default) while the run is going, so a slow model or tool never loses it. If a worker stops renewing (its process crashed, or it froze), another worker takes the run over once the lease has expired (30 seconds by default) and continues from the last checkpoint. A frozen worker that wakes up later can no longer change the run: every update checks that the worker still holds it, so it stops quietly. A shorter lease resumes crashed runs sooner; a longer one tolerates longer pauses (a long garbage collection, a busy host) without a takeover.
+
+A takeover is logged as a warning (`Run taken over from a worker that stopped responding`), the run's `run.status` event carries `takenOver: true`, and the run records `claimedFrom: 'stalled'` and how many times it was taken over (`takeovers`). An occasional takeover after a crash or deploy is normal; a rising count means workers are freezing or being killed, and a run taken over again and again points at a step that brings its worker down. With PostgreSQL you can watch both with SQL:
+
+```sql
+-- runs whose worker stopped renewing its lease (adjust to your ai.runs.lease-ms)
+SELECT id, record->>'agent' AS agent, record->>'workerId' AS worker, heartbeat_at
+FROM amoxi_runs WHERE status = 'running' AND heartbeat_at < now() - interval '60 seconds';
+
+-- runs taken over more than once
+SELECT id, record->>'agent' AS agent, (record->>'takeovers')::int AS takeovers
+FROM amoxi_runs WHERE (record->>'takeovers')::int > 1 ORDER BY created_at DESC LIMIT 50;
+```
+
 | Endpoint | |
 |---|---|
 | `POST /agents/:agent/runs` `{ input, threadId? }` | Starts a run: `202` with the run, or a live event stream with `Accept: text/event-stream` |
@@ -432,7 +446,7 @@ A message starts a **run**, which executes in a background worker, not in the HT
 | `POST /agents/:agent/runs/:id/cancel` | Cancels, also mid-tool (tools receive an `AbortSignal`) |
 | `GET /agents/:agent/threads`, `/threads/:id` | The caller's conversations, as chat items |
 
-Events: `message.delta` (tokens), `message.completed`, `tool.started`, `tool.completed`, `ui`, `approval.required`, `progress`, `run.status`, `run.completed`, `run.failed`. Tools with `approval: true` pause the run (`awaiting_approval`) until a person decides; nothing runs before that.
+Events: `message.delta` (tokens), `message.completed`, `tool.started`, `tool.completed`, `ui`, `approval.required`, `progress`, `run.status` (`takenOver: true` when another worker resumed the run), `run.completed`, `run.failed`. Tools with `approval: true` pause the run (`awaiting_approval`) until a person decides; nothing runs before that.
 
 Conversations belong to an owner: an anonymous id in the encrypted session cookie by default, or what `owner(req)` returns (stored as `userOwner(id)`, so your code can list a user's conversations with `platform.threads(userOwner(id), agent)`). Other owners get 404. Runs started over MCP or A2A have the principal `{ channel: 'mcp' }` or `{ channel: 'a2a' }`, so tools and guardrails can tell them apart. Your middleware runs first, so authentication middleware protects the agent endpoints too.
 
@@ -716,7 +730,7 @@ Values come from `application.json`, then `application-<profile>.json`, then `.e
 | `ai.store.type` / `ai.store.dir` | `file` (`memory` in tests) / `data/ai` | `postgres` uses `DATABASE_URL` (`ai.postgres.url`) and the `pg` package |
 | `ai.embeddings.provider` / `model` / `base-url` | `auto` / `text-embedding-3-small` / OpenAI | offline hashing embedder without a key |
 | `ai.path` | `/agents` | agent endpoints |
-| `ai.runs.worker` / `concurrency` / `lease-ms` / `max-turns` | `true` / 8 / 30000 / 12 | `worker=false` for web-only instances |
+| `ai.runs.worker` / `concurrency` / `lease-ms` / `max-turns` | `true` / 8 / 30000 / 12 | `worker=false` for web-only instances; `lease-ms` is how long a run waits before another worker takes it over from one that stopped responding |
 | `ai.history.limit` / `ai.input.max-length` / `ai.tool-output.max-chars` | 40 / 20000 / 20000 | |
 | `ai.mcp.enabled` / `path` / `token` / `expose-agents` / `approvals` | `false` / `/mcp` / none / `true` / `decline` | `expose-agents=false` hides the `ask_<agent>` tools; `approvals=wait` pauses for a person in the app |
 | `ai.a2a.enabled` / `path` / `token` / `approvals` | `false` / `/a2a` / none / `decline` | `approvals`: `decline`, `wait` (a person in the app) or `caller` (trusted partners) |

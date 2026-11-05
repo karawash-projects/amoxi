@@ -18,6 +18,12 @@ export function isClaimable(run: RunRecord, staleBeforeMs: number): boolean {
   return Number.isNaN(hb) || hb < staleBeforeMs;
 }
 
+/** What a claim records about how it got the run: a stale `running` run was taken over from a stalled worker. */
+export function claimedFrom(run: RunRecord): Pick<RunRecord, 'claimedFrom' | 'takeovers'> {
+  const stalled = run.status === 'running';
+  return { claimedFrom: stalled ? 'stalled' : 'queued', takeovers: (run.takeovers ?? 0) + (stalled ? 1 : 0) };
+}
+
 /** Parses `staleBefore` (ISO time) into epoch milliseconds, with a clear error. */
 export function parseStaleBefore(staleBefore: string): number {
   const ms = Date.parse(staleBefore);
@@ -98,7 +104,7 @@ export class MemoryRunStore implements RunStore {
     if (!best) return undefined;
     // Synchronous from check to write: atomic within the process.
     const now = new Date().toISOString();
-    const next: RunRecord = { ...best, status: 'running', workerId, heartbeatAt: now, updatedAt: now, startedAt: best.startedAt ?? now, revision: (best.revision ?? 0) + 1 };
+    const next: RunRecord = { ...best, status: 'running', workerId, heartbeatAt: now, updatedAt: now, startedAt: best.startedAt ?? now, revision: (best.revision ?? 0) + 1, ...claimedFrom(best) };
     this.runs.set(next.id, next);
     return structuredClone(next);
   }

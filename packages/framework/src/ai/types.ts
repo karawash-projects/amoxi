@@ -288,6 +288,14 @@ export interface RunRecord {
   /** Worker that holds the run, and its last heartbeat (lease for crash recovery). */
   readonly workerId?: string;
   readonly heartbeatAt?: string;
+  /**
+   * How the current worker got the run: `'queued'` (new, resumed after an approval, or handed back
+   * on shutdown) or `'stalled'` (taken over from a worker that stopped heartbeating: it crashed or
+   * stalled for longer than `ai.runs.lease-ms`).
+   */
+  readonly claimedFrom?: 'queued' | 'stalled';
+  /** How many times the run was taken over from a worker that stopped heartbeating. Alert on a rising count. */
+  readonly takeovers?: number;
   /** Set when someone cancels a run another worker is executing; that worker stops at its next heartbeat. */
   readonly cancelRequested?: boolean;
   /** Incremented by the store on every update; used for compare-and-set (RunUpdateCondition). */
@@ -305,7 +313,7 @@ export interface RunEvent {
 
 /**
  * The Amoxi agent stream protocol. Every event is also an SSE event of the same name.
- *   run.status        { status }
+ *   run.status        { status, takenOver?, takeovers? }   takenOver: resumed after a worker stopped responding
  *   message.delta     { text }                       token streaming
  *   message.completed { text }
  *   tool.started      { callId, tool, input }

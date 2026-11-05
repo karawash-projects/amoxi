@@ -11,6 +11,7 @@
     "start": "npm start -w user-service",
     "website": "npm run dev -w website",
     "bench": "node bench/startup-bench.mjs",
+    "bench:agents": "node bench/agent-runs.cjs",
     "create": "node packages/create-amoxi-app/index.js",
     "check:licenses": "node scripts/check-licenses.mjs",
     "verify": "node scripts/verify/verify.mjs"

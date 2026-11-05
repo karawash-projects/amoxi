@@ -19,3 +19,7 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    groups:
+      # Every github/codeql-action step must use the same version, or CodeQL fails.
+      codeql:
+        patterns: ['github/codeql-action*']

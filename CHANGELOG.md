@@ -10,6 +10,7 @@ All notable changes to `amoxi` and `create-amoxi-app` are documented here. Both 
 
 ### Tests
 
+- `npm run bench:agents` benchmarks durable agent runs (a support agent handling refunds) on the memory, file or PostgreSQL store; the README lists the results.
 - The run store tests now pass on PostgreSQL: they used one thread for every run, which PostgreSQL rejects because a thread has at most one unfinished run.
 
 ## 0.6.1

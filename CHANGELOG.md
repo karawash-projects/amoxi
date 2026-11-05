@@ -4,6 +4,10 @@ All notable changes to `amoxi` and `create-amoxi-app` are documented here. Both 
 
 ## Unreleased
 
+## 0.6.2
+
+Takeovers of agent runs are now visible, and a new benchmark measures durable agent runs. Nothing breaks.
+
 ### Agents
 
 - **Takeovers are visible.** When a worker stops renewing its lease and another worker resumes the run, Amoxi logs a warning, the `run.status` event carries `takenOver: true` and `takeovers`, and the run records `claimedFrom` (`'queued'` or `'stalled'`) and `takeovers`, a count you can alert on. The README explains how leases work and gives SQL for spotting stuck leases and runs taken over repeatedly with PostgreSQL.
@@ -12,6 +16,7 @@ All notable changes to `amoxi` and `create-amoxi-app` are documented here. Both 
 
 - `npm run bench:agents` benchmarks durable agent runs (a support agent handling refunds) on the memory, file or PostgreSQL store; the README lists the results.
 - The run store tests now pass on PostgreSQL: they used one thread for every run, which PostgreSQL rejects because a thread has at most one unfinished run.
+- CodeQL is updated to 4.39.1, and Dependabot now updates all its steps together.
 
 ## 0.6.1
 

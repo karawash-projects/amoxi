@@ -390,9 +390,10 @@ export class AccountTools {
     /** @integer @minimum 1 @maximum 1000000 */
     amountCents: number;
   }, ctx: ToolContext): Promise<Receipt> {
-    // idempotent + ctx.step: if the server restarts mid-call, the call runs again on resume,
-    // and the completed step returns its recorded result instead of posting twice.
-    return ctx.step('post', () => this.ledger.transfer(String(ctx.principal), input));
+    // idempotent + ctx.step: if the server restarts mid-call, the call runs again on resume, and
+    // a completed step returns its recorded result. ctx.callId as the ledger's idempotency key
+    // covers a crash after the transfer but before the step was recorded: never posts twice.
+    return ctx.step('post', () => this.ledger.transfer(String(ctx.principal), input, { idempotencyKey: ctx.callId }));
   }
 }
 
@@ -421,7 +422,7 @@ export class BankingAssistant {
 
 ### Long-running runs, streaming and approvals
 
-A message starts a **run**, which executes in a background worker, not in the HTTP request, so it can take minutes. Every model turn and tool result is checkpointed: if the server stops or crashes mid-run, the run resumes on the next start (or on another worker) from its last step. A tool call that was interrupted part-way is never repeated blindly: by default the model is told the action may or may not have completed. Mark a tool `@Tool({ idempotent: true })` when it is safe to run again, typically because its side effects are wrapped in `ctx.step('key', fn)`: on resume it runs again, and each completed step returns its recorded result instead of running a second time. For a system of your own that takes an idempotency key, use `ctx.callId`: it is the same when an interrupted call runs again, and different for every new call, so asking twice for the same transfer in one conversation really makes two.
+A message starts a **run**, which executes in a background worker, not in the HTTP request, so it can take minutes. Every model turn and tool result is checkpointed: if the server stops or crashes mid-run, the run resumes on the next start (or on another worker) from its last step. A tool call that was interrupted part-way is never repeated blindly: by default the model is told the action may or may not have completed. Mark a tool `@Tool({ idempotent: true })` when it is safe to run again, typically because its side effects are wrapped in `ctx.step('key', fn)`: on resume it runs again, and each completed step returns its recorded result instead of running a second time. A step's result is recorded after `fn` returns, so a crash in between runs `fn` again: `ctx.step` alone is at-least-once. For exactly-once effects such as payments, also pass `ctx.callId` to the provider as its idempotency key: it is the same when an interrupted call runs again, and different for every new call, so asking twice for the same transfer in one conversation really makes two.
 
 A worker holds each run it executes with a **lease** that it renews every `ai.runs.lease-ms / 3` (10 seconds by default) while the run is going, so a slow model or tool never loses it. If a worker stops renewing (its process crashed, or it froze), another worker takes the run over once the lease has expired (30 seconds by default) and continues from the last checkpoint. A frozen worker that wakes up later can no longer change the run: every update checks that the worker still holds it, so it stops quietly. A shorter lease resumes crashed runs sooner; a longer one tolerates longer pauses (a long garbage collection, a busy host) without a takeover.
 

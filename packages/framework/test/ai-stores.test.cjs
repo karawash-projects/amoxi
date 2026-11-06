@@ -265,6 +265,24 @@ describe('FileRunStore across instances', () => {
     }
   });
 
+  test('updates from two instances never overwrite each other (a cancel is never lost)', async () => {
+    const dir = tmpDir();
+    try {
+      const worker = new FileRunStore(dir);
+      const web = new FileRunStore(dir);
+      for (let i = 0; i < 60; i++) {
+        const id = `race-${i}`;
+        await worker.create({ ...run(), id, status: 'running', workerId: 'W' });
+        await Promise.all([worker.update(id, { steps: { '__started:c1': true } }, { workerId: 'W' }), web.update(id, { cancelRequested: true })]);
+        const r = await worker.get(id);
+        assert.equal(r.cancelRequested, true, `the cancel of ${id} was lost`);
+        assert.equal(r.steps['__started:c1'], true, `the checkpoint of ${id} was lost`);
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   test('four processes draining one directory never claim the same run', async () => {
     const { execFile } = require('node:child_process');
     const dir = tmpDir();

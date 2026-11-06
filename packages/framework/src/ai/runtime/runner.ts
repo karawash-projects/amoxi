@@ -21,6 +21,7 @@ export class AgentRunner {
   private claiming = false;
   private again = false;
   private stopping = false;
+  private claims = 0;
 
   constructor(
     private readonly deps: { runs: RunStore; loop: AgentLoop; settings: AiSettings; logger: Logger; workerId: string },
@@ -81,8 +82,12 @@ export class AgentRunner {
     const { runs, settings, workerId } = this.deps;
     while (!this.stopping && this.active.size < settings.concurrency) {
       const staleBefore = new Date(Date.now() - settings.leaseMs).toISOString();
-      const run = await runs.claim(workerId, staleBefore);
+      // Each claim gets its own id, so ownership checks also tell apart two executions of one run in
+      // this process (an earlier one whose heartbeats failed for longer than the lease).
+      const run = await runs.claim(`${workerId}/${++this.claims}`, staleBefore);
       if (!run) return;
+      // This process still runs an earlier execution of it, which has lost its lease: stop that one.
+      this.active.get(run.id)?.controller.abort('lost' satisfies StopReason);
       if (run.cancelRequested) {
         // Cancelled while nobody held it: let the loop record the cancellation.
         this.launch(run, 'cancel');
@@ -118,7 +123,7 @@ export class AgentRunner {
       .catch((err) => logger.error('Agent run crashed', { runId: run.id, err }))
       .finally(() => {
         clearInterval(heartbeat);
-        this.active.delete(run.id);
+        if (this.active.get(run.id)?.controller === controller) this.active.delete(run.id);
         this.wake();
       });
     this.active.set(run.id, { controller, done });

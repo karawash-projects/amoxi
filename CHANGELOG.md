@@ -4,7 +4,7 @@ All notable changes to `amoxi` and `create-amoxi-app` are documented here. Both 
 
 ## Unreleased
 
-Security fixes from a pre-production review. Three defaults change, so check the upgrade steps.
+Security and correctness fixes from a pre-production review. Three defaults change, so check the upgrade steps.
 
 ### Breaking changes and upgrade steps
 
@@ -18,6 +18,15 @@ Security fixes from a pre-production review. Three defaults change, so check the
 - **`@Cached` no longer shares personal pages.** Reads of the session, cookies or the `Authorization` header anywhere in the request, middleware included, mark the response personal, and requests that carry an `Authorization` header skip the cache. A handler's `private` or `no-store` policy, in any header case or set on the response directly, is kept and the response is not stored. Before, a page whose auth middleware read the session could be cached and served to every visitor with `Cache-Control: public`.
 - **`*` in `server.cors.origins` no longer opens WebSockets to every site.** Browsers send cookies with WebSocket connections, so only the server's own origin and explicitly listed origins are accepted.
 - **Examples:** the banking, clinic and dispatch examples refuse to start in production while their passwordless demo sign-in is on, unless `DEMO_ENABLED=true` says the deployment is a demo with fictional data.
+
+### Fixes
+
+- **`For` lists clean up after themselves.** Rows of a list were never disposed with the page or region that rendered them, so their effects kept running and their `onMount` cleanups (intervals, listeners, event sources) never ran after a client-side navigation or when the list was hidden.
+- **`For` keeps each row's nodes together.** A row whose top level re-renders (a function returning different elements) left stray nodes behind when removed, or misplaced them on reorder.
+- **Components inside a reactive region get `onMount` on every render**, not only the first: shown again after being hidden, they mounted without running their `onMount` callbacks.
+- **Cancels are never lost on the file store with several workers.** Every update to a run now takes its cross-process lock; before, a cancel from one worker and a checkpoint from another could overwrite each other.
+- **A worker taken over just before it finishes writes nothing.** It confirms it still holds the run, and renews its lease, before saving the transcript and the final event, so a resumed run never gets a duplicate answer. Each claim also gets its own id, so two executions of one run in the same process (after heartbeats failed for longer than the lease) are told apart.
+- **Docs:** `ctx.step` is at-least-once on its own; exactly-once effects also need `ctx.callId` as the provider's idempotency key. The README example now passes it.
 
 ## 0.6.2
 

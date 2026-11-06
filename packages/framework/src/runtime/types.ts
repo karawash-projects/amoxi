@@ -91,7 +91,7 @@ export interface RequestContext {
   readonly req: IncomingMessage;
   readonly res: ServerResponse;
   readonly cookies: Cookies;
-  /** Encrypted cookie session. Works without configuration (key generated at build time). */
+  /** Encrypted cookie session. The key comes from AMOXI_SESSION_SECRET (required in production). */
   readonly session: Session;
   /** Per-request CSP nonce (added automatically to inline scripts in pages). */
   readonly nonce: string;

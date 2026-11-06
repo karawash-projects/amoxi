@@ -405,6 +405,18 @@ function encodeBody(body: unknown, headers: Record<string, string>): ResponseBod
   return JSON.stringify(body);
 }
 
+/** The Cache-Control a handler chose, whatever the header's case, or set on the response directly. */
+function declaredCacheControl(parts: Parts, rc: HttpContext): string {
+  for (const [name, value] of Object.entries(parts.headers)) if (name.toLowerCase() === 'cache-control') return String(value);
+  return String(rc.res.getHeader('cache-control') ?? '');
+}
+
+/** Sets Cache-Control, replacing the header whatever its case. */
+function setCacheControl(parts: Parts, value: string): void {
+  for (const name of Object.keys(parts.headers)) if (name.toLowerCase() === 'cache-control') delete parts.headers[name];
+  parts.headers['cache-control'] = value;
+}
+
 /** The development session key `amoxi build` keeps in .amoxi/session.key (never used in production). */
 function checkoutSessionKey(): string | undefined {
   try {
@@ -484,7 +496,13 @@ export function createHttpServer(ctx: ApplicationContext, options: HttpServerOpt
           '(it encrypts session cookies). Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"',
       );
     } else {
-      secret = ctx.module.sessionKey ?? checkoutSessionKey() ?? randomBytes(32).toString('hex');
+      const known = ctx.module.sessionKey ?? checkoutSessionKey();
+      if (known === undefined && !exporting && !['development', 'test'].includes(config.profile)) {
+        logger.warn(
+          `No AMOXI_SESSION_SECRET (profile '${config.profile}'): sessions use a key made for this process, so they end on restart and differ between workers. Set AMOXI_SESSION_SECRET.`,
+        );
+      }
+      secret = known ?? randomBytes(32).toString('hex');
     }
     contextSettings = { ...base, session: { codec: new SessionCodec(secret), cookie, maxAge } };
   }
@@ -658,11 +676,12 @@ export function createHttpServer(ctx: ApplicationContext, options: HttpServerOpt
 
   /** @Cached routes: fresh hit, stale-while-revalidate, or render and store. */
   async function cached(route: RouteDefinition, rc: HttpContext, invoke: () => unknown, representation: Representation, pagePath = rc.path): Promise<PreparedResponse> {
-    // Middleware already read who the visitor is (session, cookies, Authorization): the response is
-    // theirs alone, so the shared cache is neither read nor written.
-    if (rc.personalReads > 0) {
+    // The visitor is identified (middleware read their session, cookies or Authorization, or the
+    // request carries credentials in an Authorization header): the response is theirs alone, so the
+    // shared cache is neither read nor written.
+    if (rc.personalReads > 0 || rc.req.headers.authorization !== undefined) {
       const parts = toParts(await invoke());
-      if (!/\b(private|no-store)\b/i.test(String(parts.headers['cache-control'] ?? ''))) parts.headers['cache-control'] = 'private, no-store';
+      if (!/\b(private|no-store)\b/i.test(declaredCacheControl(parts, rc))) setCacheControl(parts, 'private, no-store');
       return new PreparedResponse(parts);
     }
     // Keyed by the page's path (not /x.md), so revalidatePath('/x') clears every representation.
@@ -693,8 +712,7 @@ export function createHttpServer(ctx: ApplicationContext, options: HttpServerOpt
     // stored, and neither the browser nor a CDN may keep it.
     const render = async (): Promise<{ parts: Parts; personal: boolean }> => {
       const parts = toParts(await invoke());
-      const declared = String(parts.headers['cache-control'] ?? '');
-      return { parts, personal: rc.personalReads > 0 || /\b(private|no-store|no-cache)\b/i.test(declared) };
+      return { parts, personal: rc.personalReads > 0 || /\b(private|no-store|no-cache)\b/i.test(declaredCacheControl(parts, rc)) };
     };
 
     const hit = responseCache.get(key);
@@ -732,7 +750,7 @@ export function createHttpServer(ctx: ApplicationContext, options: HttpServerOpt
     const { parts, personal } = await render();
     if (personal) {
       // Keep a handler's own private/no-store policy; otherwise forbid shared caching.
-      if (!/\b(private|no-store)\b/i.test(String(parts.headers['cache-control'] ?? ''))) parts.headers['cache-control'] = 'private, no-store';
+      if (!/\b(private|no-store)\b/i.test(declaredCacheControl(parts, rc))) setCacheControl(parts, 'private, no-store');
       return new PreparedResponse(parts);
     }
     store(parts);

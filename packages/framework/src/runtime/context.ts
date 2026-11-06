@@ -99,13 +99,24 @@ export class HttpContext implements RequestContext {
 
   get headers(): IncomingHttpHeaders {
     this.track('headers');
-    // Reading who the visitor is (Authorization, Cookie) makes the response personal.
-    this.headersView ??= new Proxy(this.req.headers, {
-      get: (target, key, receiver) => {
-        if ((key === 'authorization' || key === 'cookie') && this.tracking) this.personalReads++;
-        return Reflect.get(target, key, receiver);
-      },
-    });
+    // A plain copy (so it can be cloned, spread or logged) in which reading Authorization or Cookie,
+    // when the request has them, marks the response personal.
+    if (!this.headersView) {
+      const view: IncomingHttpHeaders = { ...this.req.headers };
+      for (const key of ['authorization', 'cookie'] as const) {
+        if (view[key] === undefined) continue;
+        const value = view[key];
+        Object.defineProperty(view, key, {
+          enumerable: true,
+          configurable: true,
+          get: () => {
+            if (this.tracking) this.personalReads++;
+            return value;
+          },
+        });
+      }
+      this.headersView = view;
+    }
     return this.headersView;
   }
 

@@ -760,16 +760,16 @@ Run `npm run bench` for the startup benchmark on your machine.
 
 ### Durable agent runs
 
-`npm run bench:agents` runs a support agent handling refund requests: each run is 4 model turns and 3 tool calls (look up the order, check the refund policy, issue the refund inside `ctx.step`), with the answer streamed. The model is simulated, so the numbers measure Amoxi rather than a provider. Measured on a 2-vCPU container with PostgreSQL 16 on the same machine (default durability settings, every write committed to disk):
+`npm run bench:agents` runs a support agent handling refund requests: each run is 4 model turns and 3 tool calls (look up the order, check the refund policy, issue the refund inside `ctx.step`), with the answer streamed. The model is simulated, so the numbers measure Amoxi rather than a provider. Measured with 0.7.0 on a 2-vCPU container with PostgreSQL 16 on the same machine (default durability settings, every write committed to disk):
 
 | | PostgreSQL | Files (`data/ai`) |
 |---|---|---|
-| Hosted-model speed (600 ms to first token, 60 tokens/s): a run takes 5.15 s of model time | 5.26 s per run at 256 runs at once (+2%), 44 runs/s; 5.46 s at 512 at once, 77 runs/s | 5.24 s per run, up to about 27 runs/s |
+| Hosted-model speed (600 ms to first token, 60 tokens/s): a run takes 5.15 s of model time | 5.27 s per run at 256 runs at once (+2%), 44 runs/s; 5.41 s at 512 at once, 79 runs/s | 5.24 s per run, up to about 27 runs/s |
 | Instant model: the most runs per second the worker can checkpoint | about 115 runs/s, 3.7 ms of Node.js CPU per run | about 105 runs/s |
-| Writes per run | 27: 12 to the run record, 12 event appends, 3 conversation appends | the same |
+| Writes per run | 28: 13 to the run record, 12 event appends, 3 conversation appends | the same |
 | Stored per run | about 12 kB of row data: run record 1.3 kB, 12 events 5.8 kB, 8 messages 4.8 kB | about 9 kB |
 
-With a real model, a run spends almost all its time waiting for the model, so throughput is set by how many runs execute at once (`ai.runs.concurrency`, 8 by default) and the worker's overhead stays a few percent until the store is busy. One server tops out at about 95 runs/s on this machine: beyond that, more servers sharing the PostgreSQL queue add capacity. The file store suits one server and modest load.
+With a real model, a run spends almost all its time waiting for the model, so throughput is set by how many runs execute at once (`ai.runs.concurrency`, 8 by default) and the worker's overhead stays a few percent until the store is busy. One server tops out at about 97 runs/s on this machine: beyond that, more servers sharing the PostgreSQL queue add capacity. The file store suits one server and modest load.
 
 ---
 

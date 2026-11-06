@@ -4,6 +4,8 @@ All notable changes to `amoxi` and `create-amoxi-app` are documented here. Both 
 
 ## Unreleased
 
+## 0.7.0
+
 Security and correctness fixes from a pre-production review. Three defaults change, so check the upgrade steps.
 
 ### Breaking changes and upgrade steps

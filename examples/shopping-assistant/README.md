@@ -71,9 +71,10 @@ The generative components are clickable: **Add to cart** on a product card sends
 
 From this folder:
 
-`npm start` runs in production, which refuses the demo secrets (they are in `application-development.json`, used by `npm run dev` only). Before the first start, create a file named `.env.production.local` in this folder (git ignores it) with your own values, each at least 16 characters:
+`npm start` runs in production, which refuses the demo secrets (they are in `application-development.json`, used by `npm run dev` only). Before the first start, create a file named `.env.production.local` in this folder (git ignores it) with your own values, each at least 16 characters (the session secret at least 32):
 
 ```
+AMOXI_SESSION_SECRET=replace-with-32-or-more-random-characters
 AI_MCP_TOKEN=replace-with-a-long-random-value
 AI_A2A_TOKEN=replace-with-a-long-random-value
 ```

@@ -77,13 +77,17 @@ Planning keeps running if you close the tab, and reloading the console continues
 
 From this folder:
 
-`npm start` runs in production, which refuses the demo secrets (they are in `application-development.json`, used by `npm run dev` only). Before the first start, create a file named `.env.production.local` in this folder (git ignores it) with your own values, each at least 16 characters:
+`npm start` runs in production, which refuses the demo secrets (they are in `application-development.json`, used by `npm run dev` only). Before the first start, create a file named `.env.production.local` in this folder (git ignores it) with your own values, each at least 16 characters (the session secret at least 32):
 
 ```
+AMOXI_SESSION_SECRET=replace-with-32-or-more-random-characters
+DEMO_ENABLED=true
 AI_MCP_CALLERS_PARTNER=replace-with-a-long-random-value
 AI_A2A_CALLERS_PARTNER=replace-with-a-long-random-value
 DISPATCH_TELEMATICS_SECRET=replace-with-a-long-random-value
 ```
+
+`DEMO_ENABLED=true` is required because the demo sign-in has no password (every visitor is signed in as the dispatcher): production refuses to run it otherwise. Set it only for a demo with fictional data, and replace the sign-in with real authentication before using real data.
 
 ```bash
 npm run build

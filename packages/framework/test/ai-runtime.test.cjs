@@ -316,6 +316,59 @@ describe('human approval', () => {
     }
   });
 
+  test('production refuses MCP or A2A without a token, unless allow-anonymous says middleware protects it', async () => {
+    const run = (ai) =>
+      AmoxiApplication.run(bankModule([]), {
+        config: Config.of({ server: { port: 0, host: '127.0.0.1' }, amoxi: { session: { secret: 's'.repeat(32) } }, ai: { store: { type: 'memory' }, ...ai } }, 'production'),
+        silent: true,
+        shutdownHook: false,
+        overrides: [['ChatModel', new ScriptedChatModel([])]],
+      });
+    await assert.rejects(run({ mcp: { enabled: true } }), /MCP endpoint \/mcp is enabled without a token/);
+    await assert.rejects(run({ a2a: { enabled: true } }), /A2A endpoint \/a2a is enabled without a token/);
+    for (const ai of [{ mcp: { enabled: true, 'allow-anonymous': true } }, { mcp: { enabled: true, token: 't'.repeat(32) }, a2a: { enabled: true, callers: { partner: 'p'.repeat(32) } } }]) {
+      const app = await run(ai);
+      await app.close();
+    }
+  });
+
+  test('calls after an action awaiting approval wait for the decision, then run in order', async () => {
+    const t = await start([{ toolCalls: [{ name: 'transfer', input: { amount: 50 } }, { name: 'get_balance', input: {} }] }, { text: 'Done.' }]);
+    try {
+      const run = await t.platform.startRun({ agent: 'assistant', input: 'send 50 then show my balance', owner: 'o1' });
+      const paused = await waitFor(async () => {
+        const r = await t.platform.getRun(run.id);
+        return r.status === 'awaiting_approval' && r;
+      });
+      await new Promise((r) => setTimeout(r, 100));
+      assert.deepEqual(t.log, [], 'nothing ran before the decision');
+      await t.platform.decide(run.id, paused.pending[0].callId, { approved: true });
+      await waitFor(async () => (await t.platform.getRun(run.id)).status === 'completed');
+      assert.deepEqual(t.log.filter((l) => l !== 'finished:completed'), ['transfer:50', 'balance']);
+    } finally {
+      await t.app.close();
+    }
+  });
+
+  test('calls planned behind a declined action are not run', async () => {
+    const t = await start([{ toolCalls: [{ name: 'transfer', input: { amount: 60 } }, { name: 'get_balance', input: {} }] }, { text: 'Okay.' }]);
+    try {
+      const run = await t.platform.startRun({ agent: 'assistant', input: 'send 60 then show my balance', owner: 'o1' });
+      const paused = await waitFor(async () => {
+        const r = await t.platform.getRun(run.id);
+        return r.status === 'awaiting_approval' && r;
+      });
+      await t.platform.decide(run.id, paused.pending[0].callId, { approved: false });
+      await waitFor(async () => (await t.platform.getRun(run.id)).status === 'completed');
+      assert.ok(!t.log.some((l) => l === 'balance' || l.startsWith('transfer')), t.log.join(','));
+      const results = t.model.requests[1].messages.filter((m) => m.role === 'tool').flatMap((m) => m.content);
+      assert.equal(results.length, 2, 'both calls answered');
+      assert.match(JSON.stringify(results.find((r) => r.name === 'get_balance').output), /declined an earlier action/);
+    } finally {
+      await t.app.close();
+    }
+  });
+
   test('approve and cancel at the same time: never "cancelled" while the action runs, never stuck', async () => {
     for (const order of ['approve-first', 'cancel-first']) {
       for (let trial = 0; trial < 6; trial++) {

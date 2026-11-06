@@ -1,8 +1,9 @@
 // Copyright 2026 Ahmad Karawash
 // SPDX-License-Identifier: Apache-2.0
 
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
+import { SESSION_SECRET } from '../lib/apps.mjs';
 import { Client } from '../lib/http.mjs';
 import { freePort, run, ServerProcess } from '../lib/proc.mjs';
 import { loadPlaywright } from './e2e.mjs';
@@ -146,11 +147,25 @@ export const scaffold = {
         const r = await run('npm', ['test'], { cwd: dir, timeoutMs: 8 * 60_000 });
         if (r.code !== 0) throw Object.assign(new Error('tests failed'), { detail: r.output.slice(-4000) });
       });
+      await ctx.check(`${template}: production refuses to start without AMOXI_SESSION_SECRET`, async () => {
+        // The generator wrote a secret for this machine; a server without one must refuse to start.
+        const local = path.join(dir, '.env.production.local');
+        ctx.assert.match(readFileSync(local, 'utf8'), /^AMOXI_SESSION_SECRET=[0-9a-f]{64}$/m, 'create-amoxi-app wrote no session secret');
+        renameSync(local, `${local}.off`);
+        try {
+          const port = await freePort();
+          const r = await run(process.execPath, ['dist/src/main.js'], { cwd: dir, env: { SERVER_PORT: String(port), NODE_ENV: 'production' }, timeoutMs: 60_000 });
+          ctx.assert.notEqual(r.code, 0, 'the app started without a session secret');
+          ctx.assert.match(r.output, /Set AMOXI_SESSION_SECRET in production/);
+        } finally {
+          renameSync(`${local}.off`, local);
+        }
+      });
       await ctx.check(`${template}: production start (amoxi start) serves, then shuts down cleanly`, async () => {
         const port = await freePort();
         const server = await ServerProcess.start(name, [path.join(dir, 'node_modules', 'amoxi', 'bin', 'amoxi.js'), 'start', 'dist/src/main.js', '--workers', '2'], {
           cwd: dir,
-          env: { SERVER_PORT: String(port), NODE_ENV: 'production' },
+          env: { SERVER_PORT: String(port), NODE_ENV: 'production', AMOXI_SESSION_SECRET: SESSION_SECRET },
           readyUrl: `http://127.0.0.1:${port}/amoxi/health/ready`,
         });
         try {
@@ -178,7 +193,7 @@ export const scaffold = {
           const port = await freePort();
           const server = await ServerProcess.start(name, [path.join(dir, 'node_modules', 'amoxi', 'bin', 'amoxi.js'), 'start', 'dist/src/main.js', '--workers', '1'], {
             cwd: dir,
-            env: { SERVER_PORT: String(port), NODE_ENV: 'production' },
+            env: { SERVER_PORT: String(port), NODE_ENV: 'production', AMOXI_SESSION_SECRET: SESSION_SECRET },
             readyUrl: `http://127.0.0.1:${port}/amoxi/health/ready`,
           });
           const browser = await pw.chromium.launch({ timeout: 60_000 });

@@ -11,11 +11,14 @@ import * as path from 'node:path';
  * agent/prompt: an agent and a request that completes with the offline model.
  * mcpToken/a2aToken: the tokens the checks send. Production refuses the published demo values (they
  *   are in application-development.json only), so the checks pass their own through `env`.
- * env: environment for production runs (the secrets an example needs there).
+ * env: environment for production runs (the secrets an example needs there). Every app also gets a
+ *   session secret, which production requires; the examples with a passwordless demo sign-in get
+ *   DEMO_ENABLED, which production requires before it runs one.
  * workers: production worker count. The examples keep demo data in memory, so they run one.
  */
 const VERIFY_SECRET = (name) => `verify-${name}-0123456789abcdef`;
-export const APPS = [
+export const SESSION_SECRET = 'verify-session-secret-0123456789abcdef';
+const APP_LIST = [
   { id: 'user-service', dir: 'examples/user-service', websocket: '/ws/activity', workers: 2 },
   {
     id: 'banking-assistant',
@@ -62,6 +65,10 @@ export const APPS = [
   },
   { id: 'website', dir: 'website', workers: 2 },
 ];
+export const APPS = APP_LIST.map((app) => ({
+  ...app,
+  env: { AMOXI_SESSION_SECRET: SESSION_SECRET, ...(app.session || app.id === 'dispatch-agent' ? { DEMO_ENABLED: 'true' } : {}), ...(app.env ?? {}) },
+}));
 
 /** Signs a client in as the app's demo user (no-op for apps without sign-in). */
 export async function signIn(client, app) {

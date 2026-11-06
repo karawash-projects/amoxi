@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { randomBytes, randomUUID } from 'node:crypto';
-import { createReadStream, statSync } from 'node:fs';
+import { createReadStream, readFileSync, statSync } from 'node:fs';
+import * as path from 'node:path';
 import { Readable } from 'node:stream';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { performance } from 'node:perf_hooks';
@@ -404,6 +405,28 @@ function encodeBody(body: unknown, headers: Record<string, string>): ResponseBod
   return JSON.stringify(body);
 }
 
+/** The Cache-Control a handler chose, whatever the header's case, or set on the response directly. */
+function declaredCacheControl(parts: Parts, rc: HttpContext): string {
+  for (const [name, value] of Object.entries(parts.headers)) if (name.toLowerCase() === 'cache-control') return String(value);
+  return String(rc.res.getHeader('cache-control') ?? '');
+}
+
+/** Sets Cache-Control, replacing the header whatever its case. */
+function setCacheControl(parts: Parts, value: string): void {
+  for (const name of Object.keys(parts.headers)) if (name.toLowerCase() === 'cache-control') delete parts.headers[name];
+  parts.headers['cache-control'] = value;
+}
+
+/** The development session key `amoxi build` keeps in .amoxi/session.key (never used in production). */
+function checkoutSessionKey(): string | undefined {
+  try {
+    const key = readFileSync(path.join(process.cwd(), '.amoxi', 'session.key'), 'utf8').trim();
+    return /^[0-9a-f]{64}$/.test(key) ? key : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function createHttpServer(ctx: ApplicationContext, options: HttpServerOptions): Server {
   const { config, logger, staticFiles, management, health, dev } = options;
   // Beans switched off by @Requires contribute no routes, middleware or error pages.
@@ -454,21 +477,32 @@ export function createHttpServer(ctx: ApplicationContext, options: HttpServerOpt
   const llmsEnabled = semantic && config.boolean('amoxi.llms-txt.enabled', 'true') && !routes.some((r) => r.path === '/llms.txt');
   const exporting = config.boolean('amoxi.export', 'false');
 
-  // Sessions: an explicit secret is mandatory in production; development gets a per-process one.
+  // Sessions: production needs an explicit secret (AMOXI_SESSION_SECRET), the same on every instance.
+  // Nothing is embedded in the build, so build output and images hold no key.
   let contextSettings: ContextSettings;
   {
     const cookie = config.string('amoxi.session.cookie', 'amoxi_session');
     const maxAge = config.number('amoxi.session.max-age', String(7 * 24 * 3600));
     const base = { trustProxy, secureCookies: production, i18n: ctx.module.i18n };
-    // Key precedence: AMOXI_SESSION_SECRET (optional, keeps users logged in across deploys) >
-    // the key embedded by `amoxi build` (shared by every instance of a build) > a per-process
-    // key (only for hand-written modules without a build key, e.g. unit tests).
+    // Key precedence: AMOXI_SESSION_SECRET > (outside production) the checkout's .amoxi/session.key,
+    // created by `amoxi build` so dev restarts keep you logged in > a per-process key.
     let secret: string;
     if (config.has('amoxi.session.secret')) {
       secret = config.string('amoxi.session.secret');
       if (secret.length < 32) throw new ConfigurationError('amoxi.session.secret must be at least 32 characters');
+    } else if (production && !exporting) {
+      throw new ConfigurationError(
+        'Set AMOXI_SESSION_SECRET in production: 32 or more random characters, the same on every instance, kept out of git ' +
+          '(it encrypts session cookies). Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"',
+      );
     } else {
-      secret = ctx.module.sessionKey ?? randomBytes(32).toString('hex');
+      const known = ctx.module.sessionKey ?? checkoutSessionKey();
+      if (known === undefined && !exporting && !['development', 'test'].includes(config.profile)) {
+        logger.warn(
+          `No AMOXI_SESSION_SECRET (profile '${config.profile}'): sessions use a key made for this process, so they end on restart and differ between workers. Set AMOXI_SESSION_SECRET.`,
+        );
+      }
+      secret = known ?? randomBytes(32).toString('hex');
     }
     contextSettings = { ...base, session: { codec: new SessionCodec(secret), cookie, maxAge } };
   }
@@ -642,6 +676,14 @@ export function createHttpServer(ctx: ApplicationContext, options: HttpServerOpt
 
   /** @Cached routes: fresh hit, stale-while-revalidate, or render and store. */
   async function cached(route: RouteDefinition, rc: HttpContext, invoke: () => unknown, representation: Representation, pagePath = rc.path): Promise<PreparedResponse> {
+    // The visitor is identified (middleware read their session, cookies or Authorization, or the
+    // request carries credentials in an Authorization header): the response is theirs alone, so the
+    // shared cache is neither read nor written.
+    if (rc.personalReads > 0 || rc.req.headers.authorization !== undefined) {
+      const parts = toParts(await invoke());
+      if (!/\b(private|no-store)\b/i.test(declaredCacheControl(parts, rc))) setCacheControl(parts, 'private, no-store');
+      return new PreparedResponse(parts);
+    }
     // Keyed by the page's path (not /x.md), so revalidatePath('/x') clears every representation.
     const path = rc.search ? `${pagePath}?${rc.search}` : pagePath;
     // Each representation of a page (HTML, markdown, JSON) is cached separately.
@@ -665,12 +707,12 @@ export function createHttpServer(ctx: ApplicationContext, options: HttpServerOpt
       responseCache.set(key, { status: 200, headers, body: parts.body as string | Buffer | undefined, nonce, storedAt: Date.now(), ttlMs: ttl * 1000, swrMs: swr * 1000 });
     };
 
-    // A page that read the visitor's cookies or session is personal: it is never stored, and neither
-    // the browser nor a CDN may keep it.
+    // A page is personal when anything in this request, middleware included, read the visitor's
+    // session, cookies or Authorization header, or when the handler marked it private: it is never
+    // stored, and neither the browser nor a CDN may keep it.
     const render = async (): Promise<{ parts: Parts; personal: boolean }> => {
-      const before = rc.personalReads;
       const parts = toParts(await invoke());
-      return { parts, personal: rc.personalReads > before };
+      return { parts, personal: rc.personalReads > 0 || /\b(private|no-store|no-cache)\b/i.test(declaredCacheControl(parts, rc)) };
     };
 
     const hit = responseCache.get(key);
@@ -707,7 +749,8 @@ export function createHttpServer(ctx: ApplicationContext, options: HttpServerOpt
     }
     const { parts, personal } = await render();
     if (personal) {
-      parts.headers['cache-control'] = 'private, no-store';
+      // Keep a handler's own private/no-store policy; otherwise forbid shared caching.
+      if (!/\b(private|no-store)\b/i.test(declaredCacheControl(parts, rc))) setCacheControl(parts, 'private, no-store');
       return new PreparedResponse(parts);
     }
     store(parts);

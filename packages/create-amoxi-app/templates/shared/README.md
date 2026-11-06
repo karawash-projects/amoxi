@@ -13,7 +13,9 @@ Created with `create-amoxi-app`.
 
 ## Configuration
 
-No environment variables are required. Settings come from `application.json`, then `application-<profile>.json`, then `.env` files, then environment variables. The profile is `production` under `npm start` and `development` under `npm run dev`.
+Settings come from `application.json`, then `application-<profile>.json`, then `.env` files, then environment variables. The profile is `production` under `npm start` and `development` under `npm run dev`.
+
+Production needs one secret, `AMOXI_SESSION_SECRET`, which encrypts session cookies: 32 or more random characters, the same on every instance, never committed. `create-amoxi-app` put one in `.env.production.local` so `npm start` works on this machine; that file is git-ignored and kept out of Docker images, so set the variable on each server (for Docker: `docker run -e AMOXI_SESSION_SECRET=...`).
 
 ## Deploy
 

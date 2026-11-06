@@ -43,11 +43,11 @@ export interface BuildResult {
 }
 
 /**
- * The session key for this checkout: created once in .amoxi/session.key (git-ignored) and reused,
- * so dev restarts and rebuilds keep you logged in. A fresh checkout (CI, Docker) gets a new key,
- * just as Next.js generates its Server Actions key per build.
+ * The development session key for this checkout: created once in .amoxi/session.key (git-ignored)
+ * and read at startup outside production, so dev restarts keep you logged in. It is never embedded
+ * in the build: production requires AMOXI_SESSION_SECRET.
  */
-function sessionKeyFor(projectDir: string): string {
+function ensureSessionKey(projectDir: string): string {
   const file = path.join(projectDir, '.amoxi', 'session.key');
   try {
     const existing = readFileSync(file, 'utf8').trim();
@@ -103,13 +103,13 @@ export async function runBuild(o: BuildOptions): Promise<BuildResult> {
     const openapi = generateOpenApi(graph.ordered, info);
     if (o.openapiFile) writeFileSync(o.openapiFile, `${JSON.stringify(openapi, null, 2)}\n`);
     const hasApi = Object.keys((openapi as { paths: object }).paths).length > 0;
+    ensureSessionKey(projectDir);
     const code = generateModule(graph, {
       outFile: o.outFile,
       runtimeModule: o.runtime,
       client: client?.manifest,
       i18n: i18n.bundle,
       openapi: hasApi ? openapi : undefined,
-      sessionKey: sessionKeyFor(projectDir),
       reactIslands: analysis.islands.filter((i) => i.react),
       ai: analysis.usesAi ? { islands: analysis.islands } : undefined,
     });

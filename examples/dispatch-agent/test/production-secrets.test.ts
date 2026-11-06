@@ -6,11 +6,12 @@ import { applicationModule } from '../src/generated/amoxi.generated';
 // The demo secrets live in application-development.json, which production never loads. These
 // tests start the app with the production profile, as `npm start` does.
 const DEMO = 'demo-mcp-token-not-a-secret';
+const SESSION_SECRET = 'a-session-secret-from-the-environment-0123456789';
 const REAL = 'a-real-secret-from-the-environment-0123456789';
 
 const start = (ai: object, extra: object = { dispatch: { telematics: { secret: REAL } } }) =>
   AmoxiApplication.run(applicationModule, {
-    config: Config.of({ server: { port: 0, host: '127.0.0.1' }, amoxi: { log: { level: 'silent' } }, ai: { ...ai, store: { type: 'memory' } }, ...extra }, 'production'),
+    config: Config.of({ server: { port: 0, host: '127.0.0.1' }, amoxi: { log: { level: 'silent' }, session: { secret: SESSION_SECRET } }, demo: { enabled: true }, ai: { ...ai, store: { type: 'memory' } }, ...extra }, 'production'),
     silent: true,
     shutdownHook: false,
   });
@@ -36,4 +37,8 @@ test('production refuses to start with a published demo secret or none at all', 
 test('production starts once every secret is set', async () => {
   const app = await start({ mcp: { enabled: true, callers: { partner: REAL } }, a2a: { enabled: true, callers: { partner: REAL } } });
   await app.close();
+});
+
+test('production refuses the passwordless demo sign-in unless DEMO_ENABLED is set', async () => {
+  await refused(start({ mcp: { enabled: true, callers: { partner: REAL } }, a2a: { enabled: true, callers: { partner: REAL } } }, { dispatch: { telematics: { secret: REAL } }, demo: { enabled: false } }), /demo sign-in has no password/);
 });

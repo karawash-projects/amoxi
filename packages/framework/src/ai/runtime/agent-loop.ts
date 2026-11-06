@@ -234,10 +234,21 @@ export class AgentLoop {
     const results: ToolResultPart[] = [];
     const ui: UiPart[] = [];
     const pending: PendingApproval[] = [];
+    let declined = false;
     for (const call of calls) {
       if (env.signal.aborted) throw new StopSignal(stopReasonOf(env.signal));
       const tool = env.tools.get(call.name);
+      // Once a call waits for a person's decision, the calls after it wait too: the model may have
+      // ordered them to follow it ("transfer, then notify"), and none may run before the decision.
+      // Later calls that need approval are asked for now, so the person decides them together.
+      if (pending.length > 0 && !tool?.approval) continue;
       const result = (output: unknown, isError = false): ToolResultPart => ({ type: 'tool_result', callId: call.id, name: call.name, output: boundOutput(output, this.deps.settings.maxToolOutputChars), isError });
+      // After a declined action, the calls the model planned behind it don't run: it re-plans instead.
+      if (declined && !tool?.approval) {
+        results.push(result({ error: 'Not run: the person declined an earlier action in the same step. Ask before doing this if it is still needed.' }, true));
+        if (tool && !call.name.startsWith('show_')) env.journal.emit('tool.completed', { callId: call.id, tool: call.name, output: { skipped: true }, isError: true });
+        continue;
+      }
       if (!tool) {
         results.push(result({ error: `There is no tool named '${call.name}'. Available: ${[...env.tools.keys()].join(', ') || 'none'}` }, true));
         continue;
@@ -277,6 +288,7 @@ export class AgentLoop {
           continue;
         }
         if (!prior.decision.approved) {
+          declined = true;
           results.push(result({ error: 'The person declined this action.', note: prior.decision.note ?? null }, true));
           env.journal.emit('tool.completed', { callId: call.id, tool: call.name, output: { declined: true }, isError: true });
           continue;

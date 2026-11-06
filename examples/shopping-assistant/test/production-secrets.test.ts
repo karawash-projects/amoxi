@@ -6,11 +6,12 @@ import { applicationModule } from '../src/generated/amoxi.generated';
 // The demo secrets live in application-development.json, which production never loads. These
 // tests start the app with the production profile, as `npm start` does.
 const DEMO = 'demo-store-mcp-token';
+const SESSION_SECRET = 'a-session-secret-from-the-environment-0123456789';
 const REAL = 'a-real-secret-from-the-environment-0123456789';
 
 const start = (ai: object, extra: object = {}) =>
   AmoxiApplication.run(applicationModule, {
-    config: Config.of({ server: { port: 0, host: '127.0.0.1' }, amoxi: { log: { level: 'silent' } }, ai: { ...ai, store: { type: 'memory' } }, ...extra }, 'production'),
+    config: Config.of({ server: { port: 0, host: '127.0.0.1' }, amoxi: { log: { level: 'silent' }, session: { secret: SESSION_SECRET } }, ai: { ...ai, store: { type: 'memory' } }, ...extra }, 'production'),
     silent: true,
     shutdownHook: false,
   });

@@ -111,7 +111,10 @@ function insert(parent: Node, child: unknown, before: Node | null = null): void 
     parent.insertBefore(start, before);
     parent.insertBefore(end, before);
     effect(() => {
-      const value = (child as () => unknown)();
+      // Components rendered by `child()` register their onMount callbacks here, to run once the
+      // new nodes are in place (on every re-render, not only the first).
+      const rendered = collectMounts(() => (child as () => unknown)());
+      const value = rendered.value;
       const region = end.parentNode!;
       // Fast path: a single text node whose content just changed.
       const only = start.nextSibling;
@@ -122,6 +125,7 @@ function insert(parent: Node, child: unknown, before: Node | null = null): void 
       while (start.nextSibling && start.nextSibling !== end) region.removeChild(start.nextSibling);
       const { attached } = collectMounts(() => insert(region, value, end));
       attached(end.isConnected);
+      rendered.attached(end.isConnected);
     });
   } else {
     parent.insertBefore(document.createTextNode(String(child)), before);
@@ -162,11 +166,29 @@ export function For<T>(props: { each: () => readonly T[]; key: (item: T, index: 
   const end = document.createTextNode('');
   const fragment = document.createDocumentFragment();
   fragment.append(start, end);
-  let current = new Map<string | number, { item: T; nodes: Node[]; dispose: () => void }>();
+  // Each row sits between its own two empty text nodes, so content a row re-renders later (a
+  // reactive top level) still moves and leaves with it.
+  type Row = { item: T; first: Text; last: Text; dispose: () => void };
+  const nodesOf = (row: Row): Node[] => {
+    const out: Node[] = [];
+    for (let n: Node | null = row.first; n; n = n.nextSibling) {
+      out.push(n);
+      if (n === row.last) break;
+    }
+    return out;
+  };
+  let current = new Map<string | number, Row>();
   const pendingMounts: Array<(connected: boolean) => void> = [];
+  // Rows have their own roots (they outlive re-runs of the list effect), so they are disposed with
+  // the scope that created the list: leaving the page or hiding the region stops their effects and
+  // runs their onMount cleanups.
+  onCleanup(() => {
+    for (const row of current.values()) row.dispose();
+    current = new Map();
+  });
   effect(() => {
     const list = props.each();
-    const next = new Map<string | number, { item: T; nodes: Node[]; dispose: () => void }>();
+    const next = new Map<string | number, Row>();
     list.forEach((item, i) => {
       const k = props.key(item, i);
       const prev = current.get(k);
@@ -176,21 +198,25 @@ export function For<T>(props: { each: () => readonly T[]; key: (item: T, index: 
         return;
       }
       const holder = document.createDocumentFragment();
+      const first = document.createTextNode('');
+      const last = document.createTextNode('');
+      holder.append(first);
       const rendered = collectMounts(() =>
         createRoot((d) => {
           insert(holder, untrack(() => render(item)));
           return d;
         }),
       );
+      holder.append(last);
       pendingMounts.push(rendered.attached);
-      next.set(next.has(k) ? `${k}#${i}` : k, { item, nodes: [...holder.childNodes], dispose: rendered.value });
+      next.set(next.has(k) ? `${k}#${i}` : k, { item, first, last, dispose: rendered.value });
     });
     for (const old of current.values()) {
       old.dispose();
-      for (const n of old.nodes) n.parentNode?.removeChild(n);
+      for (const n of nodesOf(old)) n.parentNode?.removeChild(n);
     }
     const parent = end.parentNode ?? fragment;
-    for (const entry of next.values()) for (const n of entry.nodes) parent.insertBefore(n, end);
+    for (const entry of next.values()) for (const n of nodesOf(entry)) parent.insertBefore(n, end);
     current = next;
     for (const attached of pendingMounts.splice(0)) attached(end.isConnected);
   });

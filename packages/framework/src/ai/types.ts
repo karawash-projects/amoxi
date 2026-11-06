@@ -425,9 +425,11 @@ export interface ToolContext {
   /** Report progress ("Searching flights...") to the person. */
   progress(message: string): void;
   /**
-   * Runs `fn` once per tool call and key: when a run is resumed after a crash, an
+   * Records `fn`'s result per tool call and key: when a run is resumed after a crash, an
    * @Tool({ idempotent: true }) tool is run again and completed steps return their recorded
-   * results instead of repeating. Use it for side effects such as charging a card.
+   * results instead of repeating. The result is saved after `fn` returns, so a crash in between
+   * runs `fn` again (at least once). For side effects such as charging a card, also pass
+   * `callId` to the provider as its idempotency key, which makes the effect happen once.
    */
   step<T extends JsonValue>(key: string, fn: () => Promise<T> | T): Promise<T>;
 }

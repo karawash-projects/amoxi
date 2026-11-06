@@ -545,6 +545,37 @@ describe('long-running and durable runs', () => {
     }
   });
 
+  test('a worker taken over just before it finishes writes neither the answer nor the final event', async () => {
+    // The takeover lands right after the worker checkpoints the model's final answer, the last
+    // moment before it would save the transcript and run.completed.
+    const raw = new MemoryRunStore();
+    const runs = new Proxy(raw, {
+      get(target, prop) {
+        if (prop !== 'update') return typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop];
+        return async (id, patch, condition) => {
+          const result = await target.update(id, patch, condition);
+          if (condition?.workerId && JSON.stringify(patch.checkpoint ?? '').includes('Late answer.')) {
+            await target.update(id, { workerId: 'other-worker', heartbeatAt: new Date().toISOString() });
+          }
+          return result;
+        };
+      },
+    });
+    const stores = { runs, conversations: new MemoryConversationStore() };
+    const t = await start([{ text: 'Late answer.' }], { stores });
+    try {
+      const run = await t.platform.startRun({ agent: 'assistant', input: 'hi', owner: 'o' });
+      await waitFor(async () => (await raw.get(run.id)).workerId === 'other-worker');
+      await new Promise((r) => setTimeout(r, 300));
+      const messages = await stores.conversations.getMessages(run.threadId);
+      assert.ok(!JSON.stringify(messages).includes('Late answer.'), 'the superseded worker saved its answer');
+      assert.ok(!(await raw.events(run.id, 0)).some((e) => e.type === 'run.completed'), 'the superseded worker recorded run.completed');
+      assert.deepEqual([(await raw.get(run.id)).status, (await raw.get(run.id)).workerId], ['running', 'other-worker']);
+    } finally {
+      await t.app.close();
+    }
+  });
+
   test('a client that reconnects with Last-Event-ID gets only what it missed', async () => {
     const t = await start([{ text: 'One.', toolCalls: [{ name: 'get_balance', input: {} }] }, { text: 'Two.' }]);
     try {

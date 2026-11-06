@@ -380,6 +380,7 @@ export class AgentLoop {
   }
 
   private async complete(runs: RunStore, run: RunRecord, checkpoint: ChatMessage[], output: string, usage: Usage, journal: RunJournal, behavior: AgentBehavior): Promise<RunRecord> {
+    await this.fence(runs, run);
     await this.deps.conversations.appendMessages(run.threadId, checkpoint.map((m) => ({ ...m, runId: run.id })));
     // The final event is stored before the status changes and announced after it, so whoever sees
     // 'completed' can read run.completed, and whoever receives run.completed sees 'completed'.
@@ -401,6 +402,8 @@ export class AgentLoop {
       await journal.flush();
       return released;
     }
+    // A worker that was taken over while it stalled must not write the transcript or final events.
+    await this.fence(runs, run);
     const cancelled = err instanceof StopSignal;
     const failure = err instanceof RunFailure ? err : undefined;
     if (!cancelled && !failure) logger.error('Agent run failed', { runId: run.id, agent: run.agent, err });
@@ -437,6 +440,15 @@ export class AgentLoop {
     const def = this.deps.agents.get(run.agent);
     if (def) await this.finished(final, this.deps.context.get<AgentBehavior>(def.beanId));
     return final;
+  }
+
+  /**
+   * Before writing a run's transcript and final event: confirms this worker still holds the run (the
+   * update is owner-checked, so a worker that was taken over gets RunConflictError and writes
+   * nothing) and renews its lease, so no other worker can take the run over while it finishes.
+   */
+  private async fence(runs: RunStore, run: RunRecord): Promise<void> {
+    await runs.update(run.id, { heartbeatAt: now() });
   }
 
   private async finished(run: RunRecord, behavior: AgentBehavior): Promise<void> {

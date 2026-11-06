@@ -128,8 +128,9 @@ export class FileRunStore implements RunStore {
         if (TERMINAL_STATUSES.has(next.status)) await unlink(this.activeMarker(next)).catch(() => undefined);
         return next;
       });
-    if (!condition) return apply();
-    // A compare-and-set must also exclude other processes sharing the directory: take the run's lock file.
+    // Every read-modify-write excludes other processes sharing the directory (several workers under
+    // amoxi start): without the run's lock file, a cancel from one process and a checkpoint from
+    // another could each overwrite the other's change.
     return this.withLock(name, apply);
   }
 

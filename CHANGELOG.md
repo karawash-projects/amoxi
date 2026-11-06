@@ -4,6 +4,21 @@ All notable changes to `amoxi` and `create-amoxi-app` are documented here. Both 
 
 ## Unreleased
 
+Security fixes from a pre-production review. Three defaults change, so check the upgrade steps.
+
+### Breaking changes and upgrade steps
+
+- **Production requires `AMOXI_SESSION_SECRET`.** `amoxi build` no longer embeds a session key in the build, so build output and Docker images hold no key that could be used to forge sessions. Set `AMOXI_SESSION_SECRET` (32+ random characters, the same on every instance) wherever the app runs in production; it refuses to start without one. Development is unchanged. New projects get a secret in `.env.production.local` (git-ignored) so `npm start` works locally.
+- **MCP and A2A refuse to start in production without a token or callers.** Set `ai.mcp.token` / `ai.mcp.callers.<name>` (and the A2A equivalents). If your own middleware authenticates the endpoint, set `ai.mcp.allow-anonymous=true` or `ai.a2a.allow-anonymous=true`.
+- **Only `readOnly` tools are offered over MCP by default.** A tool that changes data needs `@Tool({ expose: true })` to be offered. Re-run `amoxi build` after upgrading.
+
+### Security
+
+- **Approvals hold back the rest of a turn.** When the model asked for several tools at once, calls after one awaiting approval used to run before the person decided. They now wait for the decision, and if the person declines, they are not run and the model is told.
+- **`@Cached` no longer shares personal pages.** Reads of the session, cookies or the `Authorization` header anywhere in the request, middleware included, mark the response personal; a handler's `private` or `no-store` policy is kept and the response is not stored. Before, a page whose auth middleware read the session could be cached and served to every visitor with `Cache-Control: public`.
+- **`*` in `server.cors.origins` no longer opens WebSockets to every site.** Browsers send cookies with WebSocket connections, so only the server's own origin and explicitly listed origins are accepted.
+- **Examples:** the banking, clinic and dispatch examples refuse to start in production while their passwordless demo sign-in is on, unless `DEMO_ENABLED=true` says the deployment is a demo with fictional data.
+
 ## 0.6.2
 
 Takeovers of agent runs are now visible, and a new benchmark measures durable agent runs. Nothing breaks.

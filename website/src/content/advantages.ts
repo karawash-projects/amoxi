@@ -88,7 +88,7 @@ export const ADVANTAGES: AdvantageGroup[] = [
       },
       {
         title: 'Secure by default',
-        text: 'Security headers, a Content Security Policy with a fresh nonce on every request, CSRF protection and encrypted sessions are on without any configuration.',
+        text: 'Security headers, a Content Security Policy with a fresh nonce on every request, CSRF protection and encrypted sessions are on by default. Production asks for one secret, the session key, and refuses to start without it.',
         example: 'healthcare',
       },
     ],

@@ -20,8 +20,8 @@ export interface AiSettings {
   readonly historyLimit: number;
   readonly maxInputLength: number;
   readonly maxToolOutputChars: number;
-  readonly mcp: { readonly enabled: boolean; readonly path: string; readonly token?: string; readonly callers: Readonly<Record<string, string>>; readonly exposeAgents: boolean; readonly approvals: 'decline' | 'wait' };
-  readonly a2a: { readonly enabled: boolean; readonly path: string; readonly token?: string; readonly callers: Readonly<Record<string, string>>; readonly approvals: 'decline' | 'wait' | 'caller' };
+  readonly mcp: { readonly enabled: boolean; readonly path: string; readonly token?: string; readonly callers: Readonly<Record<string, string>>; readonly exposeAgents: boolean; readonly approvals: 'decline' | 'wait'; readonly allowAnonymous: boolean };
+  readonly a2a: { readonly enabled: boolean; readonly path: string; readonly token?: string; readonly callers: Readonly<Record<string, string>>; readonly approvals: 'decline' | 'wait' | 'caller'; readonly allowAnonymous: boolean };
   readonly app: { readonly name: string; readonly description: string; readonly version: string };
   readonly production: boolean;
 }
@@ -55,6 +55,8 @@ export function readAiSettings(config: Config): AiSettings {
       callers: callers('ai.mcp.callers'),
       exposeAgents: config.boolean('ai.mcp.expose-agents', 'true'),
       approvals: oneOf(config.string('ai.mcp.approvals', 'decline'), ['decline', 'wait'] as const, 'ai.mcp.approvals'),
+      // Without a token or callers, production refuses to start unless this says your own middleware protects the endpoint.
+      allowAnonymous: config.boolean('ai.mcp.allow-anonymous', 'false'),
     },
     a2a: {
       enabled: config.boolean('ai.a2a.enabled', 'false'),
@@ -62,6 +64,7 @@ export function readAiSettings(config: Config): AiSettings {
       token: optional('ai.a2a.token'),
       callers: callers('ai.a2a.callers'),
       approvals: oneOf(config.string('ai.a2a.approvals', 'decline'), ['decline', 'wait', 'caller'] as const, 'ai.a2a.approvals'),
+      allowAnonymous: config.boolean('ai.a2a.allow-anonymous', 'false'),
     },
     app: {
       name: config.string('app.name', 'Amoxi app'),

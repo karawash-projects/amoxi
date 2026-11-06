@@ -19,7 +19,6 @@ export interface CodegenOptions {
   readonly client?: { readonly hydrate: string; readonly islands: Readonly<Record<string, string>>; readonly styles?: Readonly<Record<string, string>> };
   readonly i18n?: { defaultLocale: string; locales: string[]; messages: Record<string, Record<string, string>> };
   readonly openapi?: unknown;
-  readonly sessionKey?: string;
   /** React islands: registered so the server renders them with react-dom/server. */
   readonly reactIslands?: ReadonlyArray<{ name: string; file: string }>;
   /** Set when the app uses amoxi/ai: its islands (generative ones become UI components). */
@@ -300,14 +299,14 @@ ${reactLines.length ? `\n${reactLines.join('\n')}\n` : ''}
 
 const websockets: WebSocketDefinition[] = [];
 ${socketLines.join('\n')}
-${options.i18n ? `\nconst i18n = ${q(options.i18n)};\n` : ''}${options.sessionKey ? `\n// Session encryption key generated at build time (server-only; never sent to browsers).\nconst sessionKey = ${q(options.sessionKey)};\n` : ''}${options.openapi ? `\nconst openapi = ${q(options.openapi)};\n` : ''}
+${options.i18n ? `\nconst i18n = ${q(options.i18n)};\n` : ''}${options.openapi ? `\nconst openapi = ${q(options.openapi)};\n` : ''}
 ${options.client ? `\nconst client = ${q(options.client)};\n` : ''}${aiCode ? `\n// Agents, tools and generative UI components (amoxi/ai).\n${aiCode}\n` : ''}
 export const applicationModule: ApplicationModule = {
   beans,
   typeIndex,
   routes,
   middleware,
-  websockets,${options.client ? '\n  client,' : ''}${aiCode ? '\n  ai,\n  extensions: [aiExtension],' : ''}${errorPageLines.length ? '\n  errorPages,' : ''}${options.i18n ? '\n  i18n,' : ''}${options.openapi ? '\n  openapi,' : ''}${options.sessionKey ? '\n  sessionKey,' : ''}
+  websockets,${options.client ? '\n  client,' : ''}${aiCode ? '\n  ai,\n  extensions: [aiExtension],' : ''}${errorPageLines.length ? '\n  errorPages,' : ''}${options.i18n ? '\n  i18n,' : ''}${options.openapi ? '\n  openapi,' : ''}
   buildInfo: { generatedAt: ${q(new Date().toISOString())}, compilerVersion: ${q(COMPILER_VERSION)} },
 };
 

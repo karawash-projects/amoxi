@@ -13,7 +13,10 @@ const SECRETS: readonly { key: string; when?: string }[] = [
 /** Words that only appear in the published demo values. */
 const DEMO_VALUE = /demo|not-a-secret|not-for-production|replace-in-production/i;
 
-/** Refuses to start in production while a secret is missing, too short, or still a demo value. */
+/**
+ * Refuses to start in production while a secret is missing, too short, or still a demo value, and
+ * while the passwordless demo sign-in is on without DEMO_ENABLED=true.
+ */
 @Singleton()
 @Eager()
 export class ProductionSecrets {
@@ -27,6 +30,10 @@ export class ProductionSecrets {
       const env = key.toUpperCase().replace(/\./g, '_').replace(/-/g, '');
       if (value.length < 16) problems.push(`${key} is not set or shorter than 16 characters (set ${env})`);
       else if (DEMO_VALUE.test(value)) problems.push(`${key} still has a published demo value (set ${env} to a real secret)`);
+    }
+    // The demo sign-in has no password: anyone can sign in as any customer. Only a demo with fictional data may run it in production.
+    if (!config.boolean('demo.enabled', 'false')) {
+      problems.push('the demo sign-in has no password (anyone can sign in as any customer): replace it with real authentication, or set DEMO_ENABLED=true for a public demo with fictional data');
     }
     if (problems.length > 0) throw new Error(`Refusing to start in production:\n  - ${problems.join('\n  - ')}`);
   }

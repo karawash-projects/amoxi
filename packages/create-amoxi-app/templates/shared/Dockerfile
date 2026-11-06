@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #   docker build -t {{APP_NAME}} .
-#   docker run -p 8080:8080 {{APP_NAME}}
+#   docker run -p 8080:8080 -e AMOXI_SESSION_SECRET=<32+ random characters> {{APP_NAME}}
 
 FROM node:22-alpine AS build
 WORKDIR /app

@@ -59,7 +59,10 @@ export interface ToolOptions {
    * results) instead of asking the model what to do.
    */
   idempotent?: boolean;
-  /** Offer it to external agents over MCP (default true; tools that need approval never are). */
+  /**
+   * Offer it to external agents over MCP. Default: true for `readOnly` tools, false otherwise, so a
+   * tool that changes data is offered only when you say so. Tools that need approval never are.
+   */
   expose?: boolean;
 }
 

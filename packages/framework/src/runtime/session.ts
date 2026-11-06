@@ -5,8 +5,8 @@ import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:cr
 
 /**
  * Seals session data into a cookie with AES-256-GCM: the browser can neither read nor
- * modify it. The key is derived with HKDF from AMOXI_SESSION_SECRET when set, otherwise from
- * the key `amoxi build` generated.
+ * modify it. The key is derived with HKDF from AMOXI_SESSION_SECRET (required in production);
+ * in development, from the checkout's .amoxi/session.key or a per-process key.
  */
 export class SessionCodec {
   private readonly key: Buffer;

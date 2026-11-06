@@ -13,7 +13,7 @@
  *   `ping`. No `Mcp-Session-Id` is minted (sessions are optional), so the server stays stateless
  *   and works behind any load balancer; GET and DELETE answer 405.
  *
- * Offered tools: every app tool with `expose: true` and `approval: false`, and one `ask_<agent>`
+ * Offered tools: every app tool with `expose: true` (by default, `readOnly` tools) and `approval: false`, and one `ask_<agent>`
  * tool per agent. Tools that need a person's approval are never offered: MCP has no channel to
  * put a person in the loop on the server's side, and the calling model must not approve itself.
  */

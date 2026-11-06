@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import cluster from 'node:cluster';
+import { ConfigurationError } from '../../runtime/config';
+import type { Logger } from '../../runtime/logger';
 import { configurePages } from '../../runtime/jsx';
 import { storeKind } from '../stores/factory';
 import type { ExtensionRoute, AmoxiExtension } from '../../runtime/types';
@@ -47,6 +49,29 @@ class PageResources implements McpResourceProvider {
  * pages, and the background run worker. Added to the generated module when the app uses
  * @Agent, @Tool or @generative islands.
  */
+/**
+ * An MCP or A2A endpoint without a token or callers lets anyone who can reach it call the app's tools
+ * and agents. Production refuses to start that way unless ai.<protocol>.allow-anonymous says the app's
+ * own middleware protects the endpoint; development warns.
+ */
+function guardOpenEndpoint(
+  label: string,
+  key: 'mcp' | 'a2a',
+  s: { readonly path: string; readonly token?: string; readonly callers: Readonly<Record<string, string>>; readonly allowAnonymous: boolean },
+  production: boolean,
+  logger: Logger,
+): void {
+  if (s.token || Object.keys(s.callers).length > 0 || s.allowAnonymous) return;
+  const how = `set ai.${key}.token (AI_${key.toUpperCase()}_TOKEN) or one token per caller with ai.${key}.callers.<name>`;
+  if (production) {
+    throw new ConfigurationError(
+      `${label} endpoint ${s.path} is enabled without a token, so anyone who can reach it could call your tools and agents: ${how}. ` +
+        `If your own middleware authenticates it, set ai.${key}.allow-anonymous=true.`,
+    );
+  }
+  logger.warn(`${label} endpoint ${s.path} is enabled without a token: ${how} before production, which refuses to start without one.`);
+}
+
 export const aiExtension: AmoxiExtension = {
   name: 'amoxi/ai',
   install({ context, config, logger }) {
@@ -92,9 +117,7 @@ export const aiExtension: AmoxiExtension = {
           resources: pages.length > 0 ? reader : undefined,
         }),
       );
-      if (!settings.mcp.token && Object.keys(settings.mcp.callers).length === 0 && settings.production) {
-        logger.warn(`MCP endpoint ${settings.mcp.path} is enabled without ai.mcp.token: protect it with a token or authentication middleware`);
-      }
+      guardOpenEndpoint('MCP', 'mcp', settings.mcp, settings.production, logger);
     }
     if (settings.a2a.enabled && hasAgents) {
       routes.push(
@@ -109,6 +132,7 @@ export const aiExtension: AmoxiExtension = {
           approvals: settings.a2a.approvals,
         }),
       );
+      guardOpenEndpoint('A2A', 'a2a', settings.a2a, settings.production, logger);
     }
 
     return {

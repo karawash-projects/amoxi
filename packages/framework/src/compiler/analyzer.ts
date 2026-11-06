@@ -562,7 +562,7 @@ class Analyzer {
     let approval = false;
     let readOnly = false;
     let idempotent = false;
-    let expose = true;
+    let expose: boolean | undefined;
     const arg = dec.args[0];
     if (arg && (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg))) {
       description = arg.text;
@@ -590,6 +590,8 @@ class Analyzer {
     } else if (arg) {
       this.error(`${where}: pass a description string or an options object`, loc);
     }
+    // Offered over MCP only when it can't change anything, unless the tool says otherwise.
+    expose ??= readOnly;
     if (!description) {
       const doc = this.docOf(member);
       description = [doc?.summary, doc?.description].filter(Boolean).join('\n\n') || undefined;

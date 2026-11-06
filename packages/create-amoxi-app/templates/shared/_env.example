@@ -1,4 +1,11 @@
-# Optional settings. Nothing here is required: the app runs without any environment variables.
+# Settings from the environment. Development needs none. Production needs AMOXI_SESSION_SECRET.
 # Copy to .env.local for local overrides (git-ignored), or set them in your hosting environment.
 # Any configuration key works; dots become underscores, e.g. server.port:
 # SERVER_PORT=8080
+
+# Required in production: encrypts session cookies. 32+ random characters, the same on every instance,
+# never committed. Generate one with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# (create-amoxi-app put one in .env.production.local so `npm start` works on this machine.)
+# AMOXI_SESSION_SECRET=
+# Behind a load balancer or proxy that terminates TLS, so client IPs and HTTPS are seen correctly:
+# SERVER_TRUSTPROXY=true

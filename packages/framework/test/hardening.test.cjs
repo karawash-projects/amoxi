@@ -531,7 +531,7 @@ test('HEAD requests to a file route never open the file', async () => {
 });
 
 /** A WebSocket connection over an in-memory socket, so a test decides exactly how bytes arrive. */
-function memorySocket({ open, message, close, options = {}, head = Buffer.alloc(0), stalled = false } = {}) {
+function memorySocket({ open, message, close, options = {}, head = Buffer.alloc(0), stalled = false, origin } = {}) {
   const { EventEmitter } = require('node:events');
   const { Duplex } = require('node:stream');
   const { attachWebSockets } = load('runtime/websocket');
@@ -551,7 +551,7 @@ function memorySocket({ open, message, close, options = {}, head = Buffer.alloc(
   const ctx = { isEnabled: () => true, get: () => bean };
   const endpoint = { path: '/ws', pattern: null, paramNames: [], beanId: 0, message: (_b, c, d) => message?.(c, d), ...(open ? { open: (_b, c) => open(c) } : {}), ...(close ? { close: (_b, c, code, reason) => close(c, code, reason) } : {}) };
   const ws = attachWebSockets(server, ctx, [endpoint], { trustProxy: 0, secureCookies: false }, { maxMessageSize: 1024 * 1024, pingIntervalMs: 60_000, allowedOrigins: [], ...options }, rt.Logger.silent());
-  const req = { url: '/ws', headers: { host: 'x', upgrade: 'websocket', connection: 'Upgrade', 'sec-websocket-version': '13', 'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==' } };
+  const req = { url: '/ws', headers: { host: 'x', upgrade: 'websocket', connection: 'Upgrade', 'sec-websocket-version': '13', 'sec-websocket-key': 'dGhlIHNhbXBsZSBub25jZQ==', ...(origin ? { origin } : {}) } };
   server.emit('upgrade', req, socket, head);
   /** Server frames after the 101 response, as { opcode, payload }. */
   const frames = () => {
@@ -821,4 +821,72 @@ test('the browser client backs off when an event stream keeps closing without an
     globalThis.fetch = previous.fetch;
     globalThis.document = previous.document;
   }
+});
+
+/* ------------------------------------------------------------------ */
+/* Pre-production review (0.7.0)                                       */
+/* ------------------------------------------------------------------ */
+
+test('production refuses to start without AMOXI_SESSION_SECRET, and ignores any key in the module', () => {
+  const module = makeModule({ routes: [{ path: '/', handler: () => 'ok' }] });
+  const bare = rt.Config.of({ server: { 'request-log': false } }, 'production');
+  assert.throws(() => rt.createHttpServer(new rt.ApplicationContext(module, bare), { config: bare, logger: rt.Logger.silent() }), /Set AMOXI_SESSION_SECRET in production/);
+  const set = rt.Config.of({ server: { 'request-log': false }, amoxi: { session: { secret: 's'.repeat(32) } } }, 'production');
+  const server = rt.createHttpServer(new rt.ApplicationContext(module, set), { config: set, logger: rt.Logger.silent() });
+  assert.ok(server);
+});
+
+test('a cached page behind middleware that reads the session is never stored or shared', async () => {
+  const app = await serve({
+    middleware: (ctx, next) => ((ctx.state.user = ctx.session.get('name') ?? 'guest'), next()),
+    routes: [
+      { path: '/login', handler: (ctx) => (ctx.session.set('name', String(ctx.query.get('as'))), 'ok') },
+      { path: '/dashboard', page: true, cache: { ttl: 60, swr: 0 }, handler: (ctx) => jsx('p', { children: `Hello ${ctx.state.user}` }) },
+    ],
+  });
+  try {
+    const login = await app.get('/login?as=Ada');
+    const cookie = login.headers.get('set-cookie')[0].split(';')[0];
+    const ada = await app.get('/dashboard', { cookie });
+    assert.match(await ada.text(), /Hello Ada/);
+    assert.equal(ada.headers.get('cache-control'), 'private, no-store');
+    const guest = await app.get('/dashboard');
+    assert.match(await guest.text(), /Hello guest/, 'the next visitor got Ada\'s page');
+    assert.notEqual(guest.headers.get('x-amoxi-cache'), 'HIT');
+  } finally {
+    await app.close();
+  }
+});
+
+test('a cached page that reads the Authorization header is personal', async () => {
+  const app = await serve({ routes: [{ path: '/me', page: true, cache: { ttl: 60, swr: 0 }, handler: (ctx) => jsx('p', { children: ctx.headers.authorization ? 'Hi member' : 'Hi guest' }) }] });
+  try {
+    const member = await app.get('/me', { authorization: 'Bearer abc' });
+    assert.match(await member.text(), /Hi member/);
+    assert.equal(member.headers.get('cache-control'), 'private, no-store');
+    const guest = await app.get('/me');
+    assert.match(await guest.text(), /Hi guest/);
+  } finally {
+    await app.close();
+  }
+});
+
+test("a handler's private cache policy is kept and the response is not stored", async () => {
+  const app = await serve({ routes: [{ path: '/report', cache: { ttl: 60, swr: 0 }, handler: () => new rt.HttpResponse(200, { total: 1 }, { 'cache-control': 'private, max-age=30' }) }] });
+  try {
+    const first = await app.get('/report');
+    assert.equal(first.headers.get('cache-control'), 'private, max-age=30');
+    const second = await app.get('/report');
+    assert.notEqual(second.headers.get('x-amoxi-cache'), 'HIT');
+    assert.equal(second.headers.get('cache-control'), 'private, max-age=30');
+  } finally {
+    await app.close();
+  }
+});
+
+test("'*' in server.cors.origins does not open WebSockets to other sites", () => {
+  const evil = memorySocket({ origin: 'https://evil.example', options: { allowedOrigins: ['*'] } });
+  assert.match(evil.sent.map(String).join(''), /^HTTP\/1\.1 403/);
+  const listed = memorySocket({ origin: 'https://partner.example', options: { allowedOrigins: ['*', 'https://partner.example'] } });
+  assert.match(listed.sent.map(String).join(''), /^HTTP\/1\.1 101/);
 });

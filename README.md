@@ -319,7 +319,7 @@ ctx.session.regenerate();                             // on sign-in: same data, 
 ctx.session.destroy();                                // logout
 ```
 
-Sessions need no configuration. Like Next.js does for its Server Actions key, `amoxi build` generates an encryption key and embeds it in the server build (never in browser code), so sessions survive restarts and work across every worker and instance running that build. The key is created once per checkout in `.amoxi/session.key` (git-ignored), so rebuilding on your machine keeps you logged in, but a fresh checkout (a CI job, a Docker build) gets a new key, which logs users out on deploy. To keep users logged in across deploys, optionally set `AMOXI_SESSION_SECRET` (32+ random characters, the same everywhere). Sessions are limited to about 4 KB, the browser's cookie limit.
+Sessions are encrypted cookies (AES-GCM). In development they need no configuration: `amoxi build` creates a key once per checkout in `.amoxi/session.key` (git-ignored), so restarts keep you logged in. Production refuses to start without `AMOXI_SESSION_SECRET`: 32 or more random characters, the same on every instance, kept out of git. Nothing is embedded in the build, so build output and Docker images hold no key, and users stay logged in across deploys. `create-amoxi-app` writes one to `.env.production.local` so `npm start` works on your machine. Sessions are limited to about 4 KB, the browser's cookie limit.
 
 **Making sign-out final.** Cookie sessions are stateless: `destroy()` removes the cookie from the browser, but a copy taken earlier (for example from a shared computer or by malware) keeps working until it expires (`amoxi.session.max-age`, 7 days by default). For apps where that matters, such as banking or health data, keep the ids of signed-in sessions on the server and check them in a middleware. The banking and clinic examples do exactly this:
 
@@ -349,7 +349,7 @@ With several servers, store the ids where all of them can see them (a database t
 
 ### Caching (like Next.js ISR)
 
-`@Cached(ttl, { staleWhileRevalidate })` on GET routes and pages keeps responses in memory, serves stale copies while re-rendering in the background, and sets `Cache-Control: s-maxage` for CDNs. Call `revalidatePath('/users')` after writes. Only cache content that is identical for every visitor: a cached page that reads the visitor's cookies or session, or a response that sets a cookie, is never stored and is sent with `Cache-Control: private, no-store`, so a CDN can't hand one visitor's page or session to another. The background refresh finishes inside the request that triggered it, so its request-scoped beans (a database transaction, say) stay open until it is done.
+`@Cached(ttl, { staleWhileRevalidate })` on GET routes and pages keeps responses in memory, serves stale copies while re-rendering in the background, and sets `Cache-Control: s-maxage` for CDNs. Call `revalidatePath('/users')` after writes. Only cache content that is identical for every visitor. A response is never stored, and is sent with `Cache-Control: private, no-store`, when anything in the request read the visitor's session, cookies or `Authorization` header (middleware included, such as an auth middleware that puts the user in `ctx.state`), when it sets a cookie, or when the handler marks it `private` or `no-store` (its own policy is kept). So a CDN can't hand one visitor's page or session to another. Middleware that reads the session on every request therefore turns caching off for the pages behind it; skip it for public pages. The background refresh finishes inside the request that triggered it, so its request-scoped beans (a database transaction, say) stay open until it is done.
 
 ---
 
@@ -414,7 +414,7 @@ export class BankingAssistant {
 
 - `@Tool` works on any singleton bean. The method's input type becomes the JSON Schema the model sees, including JSDoc descriptions and validation tags; the model's arguments are validated against it before your code runs, and errors go back to the model so it can correct itself. The return type becomes the MCP output schema.
 - `@Agent` makes a singleton with `instructions()` (required) and optional hooks: `principal(req)`, `owner(req)`, `beforeToolCall({ tool, input, ctx })` (a guardrail: return a string to refuse) and `onRunFinished(run)` (audit, notifications).
-- `@Tool` options: `description`, `name`, `approval`, `readOnly` (no side effects), `idempotent` (safe to re-run, see below), `expose` (offer over MCP).
+- `@Tool` options: `description`, `name`, `approval`, `readOnly` (no side effects), `idempotent` (safe to re-run, see below), `expose` (offer over MCP; defaults to `readOnly`).
 - **Errors:** throw `ToolError` (from `amoxi/ai`) for a message meant for the model and the person, such as `throw new ToolError('Only 2 left in size M')`; the model can then explain or try something else. In production, any other error (a database error, a bug) reaches them only as "internal error" with a reference id, and the details are logged under that id. `HttpError` messages are shown too.
 - `@Agent` options: `tools` (classes), `ui` (generative islands, or `true` for all), `knowledge` (knowledge bases to search), `memory` (`true` or `{ recall, remember }`), `examples`, `maxTurns`, `model`, `name` and `description` (defaults: the class name in kebab-case, the class JSDoc).
 - Mistakes fail `amoxi build`: duplicate tool names, a tool class that isn't a bean, an unknown UI component, a missing description or `instructions()`, a non-object tool input.
@@ -446,7 +446,7 @@ FROM amoxi_runs WHERE (record->>'takeovers')::int > 1 ORDER BY created_at DESC L
 | `POST /agents/:agent/runs/:id/cancel` | Cancels, also mid-tool (tools receive an `AbortSignal`) |
 | `GET /agents/:agent/threads`, `/threads/:id` | The caller's conversations, as chat items |
 
-Events: `message.delta` (tokens), `message.completed`, `tool.started`, `tool.completed`, `ui`, `approval.required`, `progress`, `run.status` (`takenOver: true` when another worker resumed the run), `run.completed`, `run.failed`. Tools with `approval: true` pause the run (`awaiting_approval`) until a person decides; nothing runs before that.
+Events: `message.delta` (tokens), `message.completed`, `tool.started`, `tool.completed`, `ui`, `approval.required`, `progress`, `run.status` (`takenOver: true` when another worker resumed the run), `run.completed`, `run.failed`. Tools with `approval: true` pause the run (`awaiting_approval`) until a person decides; nothing runs before that, including any calls the model asked for after it in the same turn. If the person declines, those later calls aren't run either: the model is told and plans again.
 
 Conversations belong to an owner: an anonymous id in the encrypted session cookie by default, or what `owner(req)` returns (stored as `userOwner(id)`, so your code can list a user's conversations with `platform.threads(userOwner(id), agent)`). Other owners get 404. Runs started over MCP or A2A have the principal `{ channel: 'mcp' }` or `{ channel: 'a2a' }`, so tools and guardrails can tell them apart. Your middleware runs first, so authentication middleware protects the agent endpoints too.
 
@@ -516,9 +516,9 @@ Access rules apply to every view automatically: for `/account.md` and `/account/
 { "ai": { "mcp": { "enabled": true, "token": "a-long-random-secret" }, "a2a": { "enabled": true, "token": "another-long-secret" } } }
 ```
 
-- **MCP** (`POST /mcp`, Streamable HTTP; protocol 2026-07-28 and the widely used 2025-11-25): Claude, ChatGPT, Cursor and other MCP clients can call your tools (`@Tool({ expose: false })` hides one; tools that need approval are never offered), ask your agents (an `ask_<agent>` tool each), and read your pages as markdown resources.
+- **MCP** (`POST /mcp`, Streamable HTTP; protocol 2026-07-28 and the widely used 2025-11-25): Claude, ChatGPT, Cursor and other MCP clients can call your tools (by default only `readOnly` ones: a tool that changes data is offered with `@Tool({ expose: true })`, `expose: false` hides any tool, and tools that need approval are never offered), ask your agents (an `ask_<agent>` tool each), and read your pages as markdown resources.
 - **A2A** (`/.well-known/agent-card.json` and `POST /a2a`; versions 1.0 and 0.3): other agents send tasks to yours. Runs map to tasks, threads to contexts, approvals to `input-required`.
-- Both are off by default. With a token, callers must send `Authorization: Bearer <token>`; you can also protect them with middleware.
+- Both are off by default. With a token, callers must send `Authorization: Bearer <token>`. Production refuses to start an endpoint that has no token or callers, because anyone who can reach it could call your tools; if your own middleware authenticates it, say so with `ai.mcp.allow-anonymous=true` (or `ai.a2a.allow-anonymous=true`). Development starts with a warning.
 - **Telling callers apart.** Give each caller its own token: `ai.mcp.callers.<name>` and `ai.a2a.callers.<name>` (for example `AI_A2A_CALLERS_PARTNERA=...`). A caller that sends its token owns its conversations as `a2a:<name>` (or `mcp:<name>`): it can list and continue only its own tasks, and facts an agent remembers stay with it. Callers that can't be told apart (one shared `token`, or none) get an owner per conversation instead, so they can't see each other's tasks either; the task and context ids they were given are what let them come back.
 - **Approvals over MCP:** an MCP client can't approve on a person's behalf, so when an `ask_<agent>` run wants an action that needs approval, the action is declined, the agent is told why, and it finishes its answer (for example, by telling the user to do it in the app). If your app maps MCP callers to signed-in people, set `ai.mcp.approvals=wait` and the run pauses until that person approves it in the app.
 - **Approvals over A2A** work the same way by default (`ai.a2a.approvals=decline`). `wait` pauses for a person in the app; `caller` lets the calling agent approve by replying "approve", so use it only for partners you trust to act for the person.
@@ -587,7 +587,7 @@ export class ActivitySocket {
 }
 ```
 
-A dependency-free RFC 6455 implementation: masking, fragmentation, ping/pong heartbeats (dead connections are dropped), UTF-8 validation, and limits on message size and on the number of frames a message is split into. A client that stops reading what it is sent stops being read from, and is dropped if its queue keeps growing (`server.websocket.max-buffered-size`); `socket.bufferedAmount` shows how much is waiting. Messages wait until `onOpen` has finished, including any sent together with the upgrade request. `socket.close(code, reason)` accepts the codes RFC 6455 allows (1000-1003, 1007-1014, 3000-4999) and cuts the reason to the 123 bytes a close frame holds; a client's reserved close code is answered with a protocol error. Cross-site connections are refused unless their origin is in `server.cors.origins`. `socket.session` and `socket.cookies` expose the user's session (read-only). Connections close with code 1001 on graceful shutdown. Broadcasts reach clients of the same process only; use a shared channel such as Redis pub/sub across workers.
+A dependency-free RFC 6455 implementation: masking, fragmentation, ping/pong heartbeats (dead connections are dropped), UTF-8 validation, and limits on message size and on the number of frames a message is split into. A client that stops reading what it is sent stops being read from, and is dropped if its queue keeps growing (`server.websocket.max-buffered-size`); `socket.bufferedAmount` shows how much is waiting. Messages wait until `onOpen` has finished, including any sent together with the upgrade request. `socket.close(code, reason)` accepts the codes RFC 6455 allows (1000-1003, 1007-1014, 3000-4999) and cuts the reason to the 123 bytes a close frame holds; a client's reserved close code is answered with a protocol error. Cross-site connections are refused unless their origin is listed in `server.cors.origins`; `*` there never applies to WebSockets, because browsers send cookies with them. `socket.session` and `socket.cookies` expose the user's session (read-only). Connections close with code 1001 on graceful shutdown. Broadcasts reach clients of the same process only; use a shared channel such as Redis pub/sub across workers.
 
 ### File uploads
 
@@ -683,10 +683,11 @@ Build in CI rather than on the server (`npm ci`, `npm run build`, `npm test`), a
 - **Logs:** one JSON object per line, each request with `requestId`, `status` and `durationMs`. Forward an `X-Request-Id` from your proxy to correlate logs across services; error pages show the id to users for support requests.
 - **Keep management endpoints off** (`/amoxi/info`, `/beans`, `/routes`; off by default) unless they're firewalled. OpenAPI is served only outside production.
 - **CORS and CSP:** list only origins that need cross-origin API access in `server.cors.origins`. If you add third-party scripts, analytics or fonts, extend `server.csp` instead of disabling it.
-- **Cache only public content:** `@Cached` responses are shared by every visitor, so don't cache pages that use sessions or per-user data.
+- **Cache only public content:** `@Cached` responses are shared by every visitor. Amoxi refuses to store responses that read the session, cookies or `Authorization`, but per-user data from elsewhere (a header your proxy adds, say) is not detected.
 - **Limits:** review `server.max-body-size` (1 MB), upload limits, `server.request-timeout` (30 s) and `amoxi.stream-timeout` (10 s) for your workload.
 - **Rolling deploys:** island bundles in `public/_amoxi/` have content-hashed names and are cached for a year. Deploy new files before or with new server code, and keep the previous build's files during a rolling deploy so open pages never request missing bundles. (Next.js calls this version skew.)
-- **Sessions:** the session key is created per checkout (`.amoxi/session.key`), so a deploy built from a fresh checkout, as in CI or Docker, logs users out. Set `AMOXI_SESSION_SECRET` to avoid that; build output (and Docker images) contain the embedded key, so keep them private, as with Next.js builds.
+- **Sessions:** set `AMOXI_SESSION_SECRET` (32+ random characters, the same on every instance) in your hosting environment; production refuses to start without it. Rotating it signs everyone out.
+- **MCP and A2A:** give every caller a token (`ai.mcp.callers.<name>`); only `readOnly` tools are offered unless you mark one `expose: true`.
 - **Public URL:** set `app.url` to your site's public address, so links in `llms.txt` and the AI views of pages never depend on the `Host` header a client sends.
 - **Upgrading Amoxi:** re-run `amoxi build` after upgrading, because the generated code must match the runtime.
 
@@ -708,9 +709,9 @@ Values come from `application.json`, then `application-<profile>.json`, then `.e
 | `server.trust-proxy` | `false` | `true` or the number of proxies in front of the app: honour `X-Forwarded-For` / `-Proto` from them |
 | `server.security-headers` / `server.hsts` | `true` / production | |
 | `server.csp` | strict default | `{nonce}` is replaced per request; empty disables |
-| `server.cors.origins` | (none) | comma-separated, or `*` |
+| `server.cors.origins` | (none) | comma-separated, or `*` (`*` never applies to WebSockets) |
 | `server.request-log` | `true` | |
-| `amoxi.session.secret` | (key generated by `amoxi build`) | optional; set it to keep users logged in across deploys |
+| `amoxi.session.secret` | required in production | `AMOXI_SESSION_SECRET`, 32+ characters; development uses `.amoxi/session.key` |
 | `amoxi.session.cookie` / `amoxi.session.max-age` | `amoxi_session` / `604800` | seconds |
 | `amoxi.csrf.enabled` | `true` | |
 | `amoxi.client-navigation` | `true` | |
@@ -732,8 +733,8 @@ Values come from `application.json`, then `application-<profile>.json`, then `.e
 | `ai.path` | `/agents` | agent endpoints |
 | `ai.runs.worker` / `concurrency` / `lease-ms` / `max-turns` | `true` / 8 / 30000 / 12 | `worker=false` for web-only instances; `lease-ms` is how long a run waits before another worker takes it over from one that stopped responding |
 | `ai.history.limit` / `ai.input.max-length` / `ai.tool-output.max-chars` | 40 / 20000 / 20000 | |
-| `ai.mcp.enabled` / `path` / `token` / `expose-agents` / `approvals` | `false` / `/mcp` / none / `true` / `decline` | `expose-agents=false` hides the `ask_<agent>` tools; `approvals=wait` pauses for a person in the app |
-| `ai.a2a.enabled` / `path` / `token` / `approvals` | `false` / `/a2a` / none / `decline` | `approvals`: `decline`, `wait` (a person in the app) or `caller` (trusted partners) |
+| `ai.mcp.enabled` / `path` / `token` / `expose-agents` / `approvals` / `allow-anonymous` | `false` / `/mcp` / none / `true` / `decline` / `false` | `expose-agents=false` hides the `ask_<agent>` tools; `approvals=wait` pauses for a person in the app; production needs a token or callers unless `allow-anonymous` |
+| `ai.a2a.enabled` / `path` / `token` / `approvals` / `allow-anonymous` | `false` / `/a2a` / none / `decline` / `false` | `approvals`: `decline`, `wait` (a person in the app) or `caller` (trusted partners); production needs a token or callers unless `allow-anonymous` |
 | `ai.mcp.callers.<name>` / `ai.a2a.callers.<name>` | none | a token per caller (at least 16 characters); the caller then owns its conversations as `mcp:<name>` / `a2a:<name>` |
 | `app.name` / `app.description` / `app.version` / `app.url` | | shown in llms.txt, MCP and agent cards; `app.url` is also the origin of absolute links in the AI views of pages |
 

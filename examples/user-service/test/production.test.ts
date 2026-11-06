@@ -194,7 +194,7 @@ describe('production profile', () => {
     }
   });
 
-  test('sessions work in production with no configuration, shared by every instance of the build', async () => {
+  test('production requires AMOXI_SESSION_SECRET; instances that share it share sessions', async () => {
     responseCache.clear();
     const run = (extra: Record<string, unknown> = {}) =>
       AmoxiApplication.run(applicationModule, {
@@ -202,13 +202,18 @@ describe('production profile', () => {
         silent: true,
         shutdownHook: false,
       });
-    // Two instances of the same build, as behind a load balancer. No AMOXI_SESSION_SECRET anywhere.
-    const [a, b] = await Promise.all([run(), run()]);
+    // Nothing is embedded in the build, and production refuses to start without a secret.
+    assert.equal((applicationModule as { sessionKey?: string }).sessionKey, undefined, 'amoxi build embedded a session key');
+    await assert.rejects(run(), /Set AMOXI_SESSION_SECRET in production/);
+
+    // Two instances with the same secret, as behind a load balancer.
+    const shared = { amoxi: { session: { secret: 'x'.repeat(40) } } };
+    const [a, b] = await Promise.all([run(shared), run(shared)]);
+    let jar = '';
     try {
-      assert.ok(applicationModule.sessionKey && /^[0-9a-f]{64}$/.test(applicationModule.sessionKey), 'amoxi build embedded a key');
       const first = await fetch(`http://127.0.0.1:${a.port}/people/1`, { headers: { accept: 'text/html' } });
       assert.equal(first.status, 200);
-      const jar = (first.headers.get('set-cookie') ?? '').split(';')[0];
+      jar = (first.headers.get('set-cookie') ?? '').split(';')[0];
       assert.match(jar, /^amoxi_session=/);
       const onOther = await (await fetch(`http://127.0.0.1:${b.port}/people/2`, { headers: { accept: 'text/html', cookie: jar } })).text();
       assert.match(onOther, /Recently viewed.*Ada Larkwhistle/s, 'the other instance can read the session');
@@ -216,18 +221,11 @@ describe('production profile', () => {
       await Promise.all([a.close(), b.close()]);
     }
 
-    // An explicit secret (to stay logged in across deploys) replaces the build key.
-    const c = await run({ amoxi: { session: { secret: 'x'.repeat(40) } } });
+    // A cookie sealed with another secret is ignored.
+    const c = await run({ amoxi: { session: { secret: 'y'.repeat(40) } } });
     try {
-      const first = await fetch(`http://127.0.0.1:${c.port}/people/1`, { headers: { accept: 'text/html' } });
-      const jar = (first.headers.get('set-cookie') ?? '').split(';')[0];
-      const d = await run();
-      try {
-        const page = await (await fetch(`http://127.0.0.1:${d.port}/people/2`, { headers: { accept: 'text/html', cookie: jar } })).text();
-        assert.doesNotMatch(page, /Recently viewed/, 'a cookie sealed with another key is ignored');
-      } finally {
-        await d.close();
-      }
+      const page = await (await fetch(`http://127.0.0.1:${c.port}/people/2`, { headers: { accept: 'text/html', cookie: jar } })).text();
+      assert.doesNotMatch(page, /Recently viewed/, 'a cookie sealed with another key is ignored');
     } finally {
       await c.close();
     }

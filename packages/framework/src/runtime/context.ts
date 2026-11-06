@@ -38,8 +38,13 @@ export class HttpContext implements RequestContext {
    */
   readonly used = new Set<string>();
   private tracking = true;
-  /** @internal How often this request read cookies or the session: @Cached uses it to spot personal pages. */
+  /**
+   * @internal How often this request read something that identifies the visitor (the session,
+   * cookies, the Authorization or Cookie header): @Cached uses it to spot personal pages. Reads made
+   * by middleware count too, since what middleware learns usually ends up on the page.
+   */
   personalReads = 0;
+  private headersView?: IncomingHttpHeaders;
   private readonly background: Promise<unknown>[] = [];
   private track(what: string): void {
     if (!this.tracking) return;
@@ -94,7 +99,14 @@ export class HttpContext implements RequestContext {
 
   get headers(): IncomingHttpHeaders {
     this.track('headers');
-    return this.req.headers;
+    // Reading who the visitor is (Authorization, Cookie) makes the response personal.
+    this.headersView ??= new Proxy(this.req.headers, {
+      get: (target, key, receiver) => {
+        if ((key === 'authorization' || key === 'cookie') && this.tracking) this.personalReads++;
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    return this.headersView;
   }
 
   get query(): URLSearchParams {

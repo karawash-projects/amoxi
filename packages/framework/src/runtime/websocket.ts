@@ -382,7 +382,9 @@ export function attachWebSockets(
     if (origin) {
       let ok = false;
       try {
-        ok = new URL(origin).host === req.headers.host || options.allowedOrigins.includes(origin) || options.allowedOrigins.includes('*');
+        // '*' is never honoured here: for HTTP it only works without credentials, but browsers send
+        // cookies on WebSocket upgrades, so a wildcard would let any site use the visitor's session.
+        ok = new URL(origin).host === req.headers.host || options.allowedOrigins.includes(origin);
       } catch {
         ok = false;
       }

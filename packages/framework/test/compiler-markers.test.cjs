@@ -235,3 +235,29 @@ export class C {
   assert.match(all, /Value<\.\.\.> on 'port' of C\.two\(\): route parameters take PathParam/);
   assert.match(all, /uses both @Body and Body<\.\.\.>: use one/);
 });
+
+test('tools that can change data are not offered over MCP unless they say so', () => {
+  const r = analyze(
+    {
+      'tools.ts': `
+import { Singleton } from 'amoxi';
+import { Tool } from 'amoxi/ai';
+@Singleton()
+export class OrderTools {
+  /** Look an order up. */
+  @Tool({ readOnly: true }) lookupOrder(input: { id: string }) { return input.id; }
+  /** Refund an order. */
+  @Tool() refundOrder(input: { id: string }) { return input.id; }
+  /** Add a note to an order. */
+  @Tool({ expose: true }) addNote(input: { id: string }) { return input.id; }
+  /** Read, but kept private. */
+  @Tool({ readOnly: true, expose: false }) internalLookup(input: { id: string }) { return input.id; }
+}
+`,
+    },
+    { experimentalDecorators: false },
+  );
+  assert.deepEqual(r.errors, []);
+  const exposed = Object.fromEntries(r.bean('OrderTools').tools.map((t) => [t.name, t.expose]));
+  assert.deepEqual(exposed, { lookup_order: true, refund_order: false, add_note: true, internal_lookup: false });
+});
